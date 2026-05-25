@@ -1,0 +1,35 @@
+---
+description: JSON v3 导入导出与数据迁移（io.js）
+globs: utils/io.js
+alwaysApply: false
+---
+
+# 导入导出（io.js）
+
+## 导出包结构（v3）
+
+```json
+{
+  "version": 3,
+  "clothes": [],
+  "matches": [],
+  "inspirations": [],
+  "images": { "cloth:id": "base64...", "insp:id": "..." }
+}
+```
+
+- 导出文件名固定：`wardrobe_export.json`（`EXPORT_NAME`）。
+- **导出已锁定（用户验收通过）**：`exportJsonApp` / `writeDocMirror` / `io.js` 内 `#ifdef APP-PLUS` 导出分支。**未经用户明确要求不要改导出逻辑。**
+- App 导出：`writeJsonToDoc` → `Download/wardrobe_export.json` + `_doc` 备份 → 弹窗路径与约 xx KB。
+
+## 导入
+
+- `parseImportBundle` 仅接受 v3；成功后 `applyImportImages` / `hydrateClothesImages`。
+- App 导入入口：`startAppImportPicker` — 文件管理器选文件 / 应用内备份 / 粘贴 JSON。
+- 打开文件选择器**之前**不要 `uni.showLoading`（会挡住系统界面）；选完后再 loading。
+- 导入成功用 `uni.showModal` 显示写入条数；`JSON.parse` 得 `null` 视为读取失败。
+
+## 注意
+
+- 不要降低 v3 校验去兼容未迁移的旧格式，除非用户明确要求。
+- 修改 `processImportText` 时保持 `uni.showLoading` / `hideLoading` 配对。

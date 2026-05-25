@@ -1,0 +1,32 @@
+---
+description: Android App 真机文件读写（appIo.js）
+globs: utils/appIo.js
+alwaysApply: false
+---
+
+# Android 文件 I/O（appIo.js）
+
+## 环境限制
+
+- 基座常无 `uni.getFileSystemManager`、无 `uni.chooseFile`；大文件勿用 `read(byte[])` 单参（易 0B 或死循环）。
+- `Environment.getExternalStorageDirectory()` 可能返回 null，存储根固定回退 **`/storage/emulated/0`**。
+
+## 读取
+
+- **绝对路径 JSON**：优先 `readTextFileAndroid`（内部 `readLine` + 必要时字节流）。
+- **文件选择器 `content://`**：
+  - `primary:相对路径` → 解析为 `/storage/emulated/0/...` 后**直读**（与备份导入相同）。
+  - `downloads.../msf:数字` → `readUriTextViaBufferedReader`，勿依赖 `plus.io` 解析 content URI。
+- 勿用 `plus.share` / `uni.shareWithSystem` 发 json 文件（官方仅 text/image，易变成路径文字）。
+
+## 导入
+
+- 主路径：`plus.io.chooseFile` → 系统 Intent（`createChooser` + `GET_CONTENT`）→ `uni.chooseFile`；选文件前禁止 `showLoading`。
+- 应用内备份：`_doc/wardrobe_export.json`、`Download/wardrobe_export.json`、上次导出路径。
+
+## 导出（已锁定，勿改）
+
+- 写 `_doc/wardrobe_export.json` + `Download/wardrobe_export.json`，弹窗告知路径，不弹选位置。
+- 实现：`exportJsonApp`、`writeDocMirror`（`appIo.js`）。
+- `finishExportForApp` 只记录路径，**不调用分享**。
+- 日志前缀：`[Cloth导入]`、`[Cloth导出]`。

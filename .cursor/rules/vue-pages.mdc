@@ -1,0 +1,15 @@
+---
+description: Vue 页面与组件约定
+globs: pages/**/*.vue,components/**/*.vue
+alwaysApply: false
+---
+
+# Vue 页面约定
+
+- **脚本**：`<script setup>` + 从 `utils/*Storage.js`、`utils/io.js` 取数，勿在页面内重复实现存储逻辑。
+- **导航**：衣柜 / 搭配 / 灵感用 `MainTabs`；列表 → 详情用 `uni.navigateTo`。
+- **列表**：衣柜 `index` 三列紧凑网格 + `ClothCard`；筛选状态放页面内，重置用 `utils/filter.js` 模式。
+- **录入/详情**：尺寸字段用 `getSizeFieldsForType`（`constants.js`）；颜色用 `PRESET_COLORS` + 自定义。
+- **导入导出按钮**：仅在 `pages/index/index.vue`（或明确要求的页）调用 `exportJson` / `importJson`，勿散落多处。
+- **样式**：`rpx` 单位；表单注意键盘遮挡（`adjust-position`、固定 `min-height` 防裁剪）。
+- **条件编译**：H5 与 `APP-PLUS` 行为分支用 `#ifdef`，与 `io.js` 导出逻辑保持一致。

@@ -1,0 +1,61 @@
+{
+    "name" : "Cloth",
+    "appid" : "__UNI__0DD86B0",
+    "description" : "Cloth 电子衣柜",
+    "versionName" : "2.0.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "vueVersion" : "3",
+    "app-plus" : {
+        "usingComponents" : true,
+        "modules" : {
+            "Camera" : {},
+            "Gallery" : {}
+        },
+        "distribute" : {
+            "icons" : {
+                "android" : {
+                    "hdpi" : "static/app-icon.png",
+                    "xhdpi" : "static/app-icon.png",
+                    "xxhdpi" : "static/app-icon.png",
+                    "xxxhdpi" : "static/app-icon.png"
+                },
+                "ios" : {
+                    "appstore" : ""
+                }
+            },
+            "android" : {
+                "requestLegacyExternalStorage" : true,
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.CAMERA\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+                    "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>"
+                ]
+            },
+            "splashscreen" : {
+                "androidStyle" : "common",
+                "android" : {
+                    "hdpi" : "static/app-icon.png",
+                    "xhdpi" : "static/app-icon.png",
+                    "xxhdpi" : "static/app-icon.png"
+                }
+            },
+            "ios" : {
+                "dSYMs" : false
+            }
+        }
+    },
+    "mp-weixin" : {
+        "appid" : "",
+        "setting" : {
+            "urlCheck" : false
+        },
+        "usingComponents" : true
+    },
+    "h5" : {
+        "title" : "Cloth",
+        "router" : {
+            "mode" : "hash"
+        }
+    }
+}

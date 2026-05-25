@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+## Windows 终端
+
+环境为 Windows，默认 PowerShell，不用 Linux/bash 写法。
+
+禁止：`cd "路径" && 命令`、`cmd1 && cmd2`、`export VAR=...`、`source ./x.sh`、bash 路径（`/usr/...`、`$HOME`）。
+
+使用：`Set-Location "D:\path"; git status`；`$env:VAR = "value"`；多条命令用 `;` 串联；路径用 `D:\...` 并加双引号。
+
+若出现 `ParserError: InvalidEndOfLine` 或乱码，不要用 `&&` 重试，改用上写法。

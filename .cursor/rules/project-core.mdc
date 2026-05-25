@@ -1,0 +1,28 @@
+---
+description: Cloth 衣柜项目核心约定（uni-app Vue3）
+alwaysApply: true
+---
+
+# Cloth 项目核心
+
+- **技术栈**：uni-app + Vue 3，主要真机调试为 **Android App 基座**（`io.dcloud.HBuilder`），非微信小程序。
+- **语言**：用户可见文案用**简体中文**。
+- **数据**：衣物 `wardrobe_clothes_v1`、搭配 `wardrobe_matches_v1`、灵感见 `utils/inspirationStorage.js`；图片走 `utils/imageStore.js`（非 base64 进 localStorage）。
+- **导入导出**：仅 **JSON v3** 包（`version: 3` + `clothes` + `matches` + `inspirations` + `images`），逻辑在 `utils/io.js`。
+- **App 导出（已锁定勿改）**：`Download/wardrobe_export.json` + `_doc` 备份，弹窗显示路径。
+
+## 编码原则
+
+- **最小改动**：只改与任务相关的文件，避免顺手重构。
+- **沿用现有风格**：命名、存储模式、条件编译 `#ifdef APP-PLUS` 与周边文件一致。
+- **修改前**：业务或路径策略不清楚时先问用户（用户规则）。
+- **Git**：除非用户明确要求，否则不要 `git commit`。
+- **不要恢复已删除的「导出后自动分享」**：导出成功只提示路径与大小即可。
+
+## 关键文件
+
+| 领域 | 文件 |
+|------|------|
+| 导入导出 | `utils/io.js`, `utils/appIo.js` |
+| 模型 | `utils/models.js`, `utils/constants.js` |
+| 路线图 | `docs/V3-ROADMAP.md` |

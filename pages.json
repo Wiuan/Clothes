@@ -1,0 +1,82 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "我的衣柜"
+      }
+    },
+    {
+      "path": "pages/match/match",
+      "style": {
+        "navigationBarTitleText": "我的搭配"
+      }
+    },
+    {
+      "path": "pages/inspiration/inspiration",
+      "style": {
+        "navigationBarTitleText": "灵感库"
+      }
+    },
+    {
+      "path": "pages/inspirationDetail/inspirationDetail",
+      "style": {
+        "navigationBarTitleText": "灵感详情"
+      }
+    },
+    {
+      "path": "pages/add/add",
+      "style": {
+        "navigationBarTitleText": "录入衣服"
+      }
+    },
+    {
+      "path": "pages/detail/detail",
+      "style": {
+        "navigationBarTitleText": "衣服详情"
+      }
+    },
+    {
+      "path": "pages/matchDetail/matchDetail",
+      "style": {
+        "navigationBarTitleText": "搭配详情"
+      }
+    },
+    {
+      "path": "pages/batchEdit/batchEdit",
+      "style": {
+        "navigationBarTitleText": "批量编辑"
+      }
+    },
+    {
+      "path": "pages/discarded/discarded",
+      "style": {
+        "navigationBarTitleText": "已扔掉"
+      }
+    },
+    {
+      "path": "pages/importPaste/importPaste",
+      "style": {
+        "navigationBarTitleText": "粘贴导入"
+      }
+    },
+    {
+      "path": "pages/checkin/checkin",
+      "style": {
+        "navigationBarTitleText": "今日穿着"
+      }
+    },
+    {
+      "path": "pages/wearStats/wearStats",
+      "style": {
+        "navigationBarTitleText": "穿着统计"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Cloth",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f7f7f8"
+  }
+}
