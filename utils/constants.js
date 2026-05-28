@@ -113,5 +113,8 @@ export const LINK_RELATION_LABEL = {
  */
 export const APP_EXPORT_DOWNLOAD_FILE = '/storage/emulated/0/Download/wardrobe_export.json'
 
+/** App ZIP 导出到下载目录 */
+export const APP_EXPORT_DOWNLOAD_ZIP_FILE = '/storage/emulated/0/Download/wardrobe_export.zip'
+
 /** 上次 App 导出成功的路径（同机「导入应用内备份」会尝试读取） */
 export const LAST_EXPORT_PATH_KEY = 'wardrobe_last_export_abs'

@@ -2,7 +2,7 @@
   <view class="page">
     <template v-if="isCreate || isEdit">
       <view class="photo-box" @tap="choosePhoto">
-        <image v-if="imageBase64" class="preview" :src="imageBase64" mode="aspectFill" />
+        <image v-if="imageBase64" class="preview" :src="imageBase64" mode="aspectFit" />
         <view v-else class="placeholder">
           <text class="icon">📷</text>
           <text class="tip">{{ isEdit ? '点击更换参考图' : '从相册选择穿搭图' }}</text>
@@ -132,40 +132,30 @@
           {{ isEdit ? '保存修改' : '保存灵感' }}
         </button>
 
-        <text class="label section">关联衣柜（{{ linkCount }} 件）</text>
+        <text class="label section">关联衣柜</text>
         <text class="hint block">选中后点击标签切换「我有类似」/「想买」</text>
 
-        <view class="cloth-filter">
-          <picker :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
-            <view class="fchip" :class="{ active: !!clothFilterSeason }">
-              <text class="chip-k">季节</text>
-              <text class="chip-v">{{ clothSeasonLabel }}</text>
-              <text class="chip-a">▾</text>
-            </view>
+        <view class="cloth-filter-row">
+          <picker class="filter-picker" :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
+            <view class="chip" :class="{ active: !!clothFilterSeason }">{{ clothSeasonLabel }} ▾</view>
           </picker>
-          <picker :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
-            <view class="fchip" :class="{ active: !!clothFilterType }">
-              <text class="chip-k">类型</text>
-              <text class="chip-v">{{ clothTypeLabel }}</text>
-              <text class="chip-a">▾</text>
-            </view>
+          <picker class="filter-picker" :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
+            <view class="chip" :class="{ active: !!clothFilterType }">{{ clothTypeLabel }} ▾</view>
           </picker>
-          <picker :range="clothColorOpts" :value="clothColorIdx" @change="onClothColorPick">
-            <view class="fchip" :class="{ active: !!clothFilterColor }">
-              <text class="chip-k">颜色</text>
-              <text class="chip-v">{{ clothColorLabel }}</text>
-              <text class="chip-a">▾</text>
-            </view>
+          <picker class="filter-picker" :range="clothColorOpts" :value="clothColorIdx" @change="onClothColorPick">
+            <view class="chip" :class="{ active: !!clothFilterColor }">{{ clothColorLabel }} ▾</view>
           </picker>
           <text
             v-if="clothFilterSeason || clothFilterType || clothFilterColor"
-            class="cloth-filter-reset"
+            class="filter-reset"
             @tap="resetClothFilter"
           >
             重置
           </text>
+          <text class="filter-stats">
+            已选{{ linkCount }}·{{ filteredClothes.length }}/{{ allClothes.length }}
+          </text>
         </view>
-        <text class="cloth-filter-hint">显示 {{ filteredClothes.length }} / {{ allClothes.length }} 件</text>
 
         <view class="pick-grid">
           <view
@@ -195,7 +185,15 @@
       </view>
     </template>
 
-    <template v-else-if="inspiration">
+    <swiper
+      v-else-if="inspiration && orderedIds.length"
+      class="detail-swiper"
+      :current="pagerIndex"
+      :disable-touch="orderedIds.length <= 1"
+      @change="onInspPagerChange"
+    >
+      <swiper-item v-for="(id, idx) in orderedIds" :key="id">
+        <scroll-view v-if="idx === pagerIndex && inspiration" scroll-y class="page">
       <view class="hero">
         <image
           v-if="heroSrc"
@@ -253,7 +251,9 @@
 
       <button class="btn primary outline" @tap="enterEdit">编辑</button>
       <button class="btn del" @tap="onDelete">删除这条灵感</button>
-    </template>
+        </scroll-view>
+      </swiper-item>
+    </swiper>
 
     <view v-else class="loading">加载中...</view>
   </view>
@@ -273,6 +273,7 @@ import {
 import { getClothes } from '../../utils/storage.js'
 import { filterClothes } from '../../utils/filter.js'
 import {
+  getInspirations,
   getInspirationById,
   addInspiration,
   updateInspiration,
@@ -287,6 +288,7 @@ import {
   hydrateClothesImages
 } from '../../utils/imageStore.js'
 import { getImageLoadTick } from '../../utils/imageCache.js'
+import { getInspirationBrowseIds } from '../../utils/browseOrder.js'
 
 const tagColors = PRESET_COLORS.filter((c) => c !== '其他')
 const CLOTH_ALL = '全部'
@@ -302,6 +304,8 @@ const isCreate = ref(false)
 const isEdit = ref(false)
 const inspiration = ref(null)
 const editId = ref('')
+const orderedIds = ref([])
+const pagerIndex = ref(0)
 const imageBase64 = ref('')
 const imageChanged = ref(false)
 
@@ -410,15 +414,57 @@ onShow(async () => {
   }
 })
 
-async function loadInspiration(id) {
+function buildInspBrowseIds() {
+  const cached = getInspirationBrowseIds(editId.value)
+  if (cached) {
+    orderedIds.value = cached
+    pagerIndex.value = cached.indexOf(editId.value)
+    return
+  }
+  orderedIds.value = getInspirations()
+    .slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map((i) => i.id)
+  const idx = orderedIds.value.indexOf(editId.value)
+  pagerIndex.value = idx >= 0 ? idx : 0
+}
+
+function updateInspNavTitle() {
+  if (isCreate.value || isEdit.value) return
+  if (orderedIds.value.length <= 1) {
+    uni.setNavigationBarTitle({ title: '灵感详情' })
+    return
+  }
+  uni.setNavigationBarTitle({
+    title: `灵感详情 (${pagerIndex.value + 1}/${orderedIds.value.length})`
+  })
+}
+
+function onInspPagerChange(e) {
+  const idx = e.detail.current
+  if (idx === pagerIndex.value) return
+  pagerIndex.value = idx
+  const id = orderedIds.value[idx]
+  if (id) loadInspiration(id, false)
+}
+
+async function loadInspiration(id, resetPager = true) {
+  editId.value = id
   const item = getInspirationById(id)
   if (!item) {
+    orderedIds.value = []
     uni.showToast({ title: '灵感不存在', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 800)
     return
   }
   inspiration.value = item
   await hydrateInspirationsImages([item])
+  if (resetPager) buildInspBrowseIds()
+  else {
+    const idx = orderedIds.value.indexOf(id)
+    if (idx >= 0) pagerIndex.value = idx
+  }
+  updateInspNavTitle()
 }
 
 function enterEdit() {
@@ -538,6 +584,8 @@ async function onSaveForm() {
   const id = isCreate.value ? `insp_${Date.now()}` : editId.value
   let imageRef = inspiration.value?.imageRef || inspirationImageRef(id)
 
+  uni.showLoading({ title: '保存中...', mask: true })
+  try {
   if (imageChanged.value && imageBase64.value) {
     const saved = await saveInspirationImage(id, imageBase64.value)
     imageRef = saved.imageRef
@@ -573,6 +621,15 @@ async function onSaveForm() {
     uni.setNavigationBarTitle({ title: '灵感详情' })
     uni.showToast({ title: '已更新', icon: 'success' })
   }
+  } catch (e) {
+    const msg = e && e.message ? String(e.message) : ''
+    uni.showToast({
+      title: msg && msg.length < 24 ? msg : '保存失败，请重试',
+      icon: 'none'
+    })
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 function goClothDetail(id) {
@@ -596,16 +653,28 @@ function onDelete() {
 </script>
 
 <style lang="scss" scoped>
+.detail-swiper {
+  height: 100vh;
+  width: 100%;
+}
+
 .page {
   min-height: 100vh;
   background: #f7f7f8;
   padding-bottom: 48rpx;
+  box-sizing: border-box;
 }
 
 .photo-box {
   width: 100%;
-  height: 480rpx;
-  background: #eee;
+  height: 200rpx;
+  background: #f7f7f8;
+  border-radius: 16rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview {
@@ -911,59 +980,47 @@ function onDelete() {
   box-sizing: border-box;
 }
 
-.cloth-filter {
+.cloth-filter-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
   align-items: center;
-  margin-bottom: 8rpx;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+  flex-wrap: nowrap;
 }
 
-.fchip {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 8rpx 14rpx;
-  background: #f7f7f8;
+.filter-picker {
+  flex: 0 0 auto;
+}
+
+.chip {
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
+  background: #fff;
   border-radius: 999rpx;
-  border: 2rpx solid transparent;
+  border: 1rpx solid #eee;
+  color: #333;
+  white-space: nowrap;
 
   &.active {
+    color: #ff2442;
+    font-weight: 600;
     background: #fff5f6;
     border-color: #ffcdd2;
   }
 }
 
-.fchip .chip-k {
-  font-size: 22rpx;
-  color: #888;
-}
-
-.fchip .chip-v {
-  font-size: 24rpx;
-  color: #333;
-}
-
-.fchip.active .chip-v {
-  color: #ff2442;
-  font-weight: 600;
-}
-
-.fchip .chip-a {
+.filter-reset {
   font-size: 20rpx;
-  color: #bbb;
-}
-
-.cloth-filter-reset {
-  font-size: 24rpx;
   color: #ff2442;
+  flex-shrink: 0;
 }
 
-.cloth-filter-hint {
-  display: block;
-  font-size: 22rpx;
+.filter-stats {
+  margin-left: auto;
+  font-size: 20rpx;
   color: #999;
-  margin-bottom: 16rpx;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn.outline {

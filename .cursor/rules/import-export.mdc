@@ -27,7 +27,7 @@ alwaysApply: false
 - `parseImportBundle` 仅接受 v3；成功后 `applyImportImages` / `hydrateClothesImages`。
 - App 导入入口：`startAppImportPicker` — 文件管理器选文件 / 应用内备份 / 粘贴 JSON。
 - 打开文件选择器**之前**不要 `uni.showLoading`（会挡住系统界面）；选完后再 loading。
-- 导入成功用 `uni.showModal` 显示写入条数；`JSON.parse` 得 `null` 视为读取失败。
+- 导入成功用弹窗显示 **衣物 + 搭配 + 灵感**（有则加 **穿着记录**），即使某项为 0 也要列出；`JSON.parse` 得 `null` 视为读取失败。
 
 ## 注意
 

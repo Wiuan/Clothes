@@ -69,7 +69,7 @@ export function getLastWearDate(clothId, logs) {
 export function buildWearRankList(
   clothes,
   logs,
-  { startMs = null, endMs = Date.now(), season = '' } = {}
+  { startMs = null, endMs = Date.now(), season = '', ascending = true } = {}
 ) {
   let list = clothes.filter((c) => c.status !== 'discarded')
   if (season) list = list.filter((c) => c.season === season)
@@ -85,10 +85,11 @@ export function buildWearRankList(
       }
     })
     .sort((a, b) => {
-      if (a.count !== b.count) return a.count - b.count
-      if (!a.lastDate && b.lastDate) return -1
-      if (a.lastDate && !b.lastDate) return 1
-      return (a.lastDate || '').localeCompare(b.lastDate || '')
+      if (a.count !== b.count) return ascending ? a.count - b.count : b.count - a.count
+      if (!a.lastDate && b.lastDate) return ascending ? -1 : 1
+      if (a.lastDate && !b.lastDate) return ascending ? 1 : -1
+      const cmp = (a.lastDate || '').localeCompare(b.lastDate || '')
+      return ascending ? cmp : -cmp
     })
 }
 

@@ -11,6 +11,10 @@ alwaysApply: true
 - **导入导出**：仅 **JSON v3** 包（`version: 3` + `clothes` + `matches` + `inspirations` + `images`），逻辑在 `utils/io.js`。
 - **App 导出（已锁定勿改）**：`Download/wardrobe_export.json` + `_doc` 备份，弹窗显示路径。
 
+## UI 布局
+
+- 手机端紧凑、筛选白底、一行收纳、弹窗白底等约定见 **`ui-layout.mdc`**（与 uni-app / `android-native` 均适用）。
+
 ## 编码原则
 
 - **最小改动**：只改与任务相关的文件，避免顺手重构。

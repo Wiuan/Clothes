@@ -1,0 +1,52 @@
+---
+description: 手机端 UI 布局与视觉约定（紧凑、白底筛选、一行收纳）
+globs: pages/**/*.vue,components/**/*.vue,android-native/**/*.kt
+alwaysApply: true
+---
+
+# UI 布局与视觉（用户约定）
+
+面向 **手机 App**，参考 uni-app 现有页面的密度，勿用大标题、大按钮、多余留白。
+
+## 一行能放下就一行
+
+- 筛选（季节 / 类型 / 颜色）、**已选件数**、**显示 x/y**、**重置** 等，优先合成 **单行**（右侧统计用 `margin-left: auto` / Compose `weight` 右对齐）。
+- 无标签筛选芯片用 `wrapContentWidth`，避免单个芯片 `fillMaxWidth` 挤掉同行其它控件。
+- 穿着统计：周期、季节、摘要、**少→多 / 多→少** 排序尽量压在筛选区内，说明文字可跟在后面一行。
+
+## 白底控件
+
+- **页面底**：`#f7f7f8`（`PageBg`）。
+- **选择器 / 筛选芯片 / 下拉菜单 / 表单块 / 列表卡片 / 弹窗**：背景 **`#fff` 白色**（`CardBg`），勿用灰底 `#f7f7f8` 当芯片默认色。
+- **AlertDialog / 确认弹窗**（Android Compose）：必须用 `AppAlertDialog` 或显式 `containerColor = CardBg`（白底），禁止依赖主题默认灰底。
+- 选中态：浅粉底 `#fff5f6` + 边框 `#ffcdd2` 即可。
+
+## 紧凑尺寸（参考）
+
+| 元素 | uni-app | Android Compose |
+|------|---------|-----------------|
+| 正文/芯片字 | 22–24rpx | 10–12sp |
+| 顶栏标题 | — | 15sp |
+| 主按钮高 | 72rpx | 36dp |
+| 列表行缩略图 | 80rpx | 40dp |
+| 页内 padding | 16–20rpx | 8–10dp |
+
+## 交互与结构
+
+- **今日穿着**：「记录今日穿着」放在 **筛选下方、衣服网格上方**，不要放在整页列表最底部。
+- **穿着统计**：支持 **少→多 / 多→少** 切换；列表行间距小，一屏尽量多显示条目。
+- **已扔掉**：季节 + 类型两个筛选必须同时可见（picker `flex: 0 0 auto`）。
+- 用户可见文案：**简体中文**。
+
+## 其它已锁定（勿违背）
+
+- 导入导出仅 JSON v3；App 导出路径与「导出后自动分享」规则见 `project-core.mdc`。
+- **最小改动**：只改与任务相关文件；新弹窗统一走 `AppAlertDialog`，新筛选行复用 `ClothPickFilterBar(compactInline = true)` 模式。
+
+## 实现入口
+
+| 能力 | uni-app | Android |
+|------|---------|---------|
+| 紧凑筛选行 | `cloth-filter-row` + `filter-stats` | `ClothPickFilterBar(compactInline)` |
+| 白底弹窗 | 系统 `showModal` 无法改色时，重要操作可改自定义弹层 | `ui/components/AppAlertDialog.kt` |
+| 筛选芯片 | `.chip { background: #fff }` | `FilterChipDropdown` 默认 `CardBg` |

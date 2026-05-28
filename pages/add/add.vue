@@ -1,7 +1,7 @@
 <template>
   <view class="page">
     <view class="photo-box" @tap="choosePhoto">
-      <image v-if="imageBase64" class="preview" :src="imageBase64" mode="aspectFill" />
+      <image v-if="imageBase64" class="preview" :src="imageBase64" mode="aspectFit" />
       <view v-else class="placeholder">
         <text class="icon">📷</text>
         <text class="tip">{{ isEdit ? '点击更换照片' : '拍照 / 从相册选择' }}</text>
@@ -428,11 +428,14 @@ async function onSave() {
 
 .photo-box {
   width: 100%;
-  height: 420rpx;
-  background: #fff;
-  border-radius: 20rpx;
+  height: 200rpx;
+  background: #f7f7f8;
+  border-radius: 16rpx;
   overflow: hidden;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview {

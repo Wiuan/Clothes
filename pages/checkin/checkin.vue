@@ -34,32 +34,28 @@
     </view>
 
     <template v-if="mode === 'single'">
-      <text class="hint">选中的每件衣服各计 1 次穿着</text>
-
-      <view class="cloth-filter">
-        <picker :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
-          <view class="fchip" :class="{ active: !!clothFilterSeason }">
-            <text class="chip-k">季节</text>
-            <text class="chip-v">{{ clothSeasonLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+      <view class="cloth-filter-row">
+        <picker class="filter-picker" :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
+          <view class="chip" :class="{ active: !!clothFilterSeason }">{{ clothSeasonLabel }} ▾</view>
         </picker>
-        <picker :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
-          <view class="fchip" :class="{ active: !!clothFilterType }">
-            <text class="chip-k">类型</text>
-            <text class="chip-v">{{ clothTypeLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+        <picker class="filter-picker" :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
+          <view class="chip" :class="{ active: !!clothFilterType }">{{ clothTypeLabel }} ▾</view>
         </picker>
         <text
           v-if="clothFilterSeason || clothFilterType"
-          class="cloth-filter-reset"
+          class="filter-reset"
           @tap="resetClothFilter"
         >
           重置
         </text>
+        <text class="filter-stats">
+          已选{{ selectedIds.length }}·{{ filteredClothes.length }}/{{ allClothes.length }}
+        </text>
       </view>
-      <text class="filter-hint">已选 {{ selectedIds.length }} 件 · 显示 {{ filteredClothes.length }} / {{ allClothes.length }}</text>
+
+      <button class="btn primary save-bar" :disabled="!canSubmit" @tap="onSubmit">
+        记录今日穿着
+      </button>
 
       <view class="pick-grid">
         <view
@@ -84,6 +80,9 @@
 
     <template v-else>
       <text class="hint">选一套搭配，其中每件衣服各计 1 次</text>
+      <button class="btn primary save-bar" :disabled="!canSubmit" @tap="onSubmit">
+        记录今日穿着
+      </button>
       <view v-if="matches.length" class="match-list">
         <view
           v-for="m in matches"
@@ -112,10 +111,6 @@
         <text>还没有搭配，请先在「搭配」页创建</text>
       </view>
     </template>
-
-    <button class="btn primary" :disabled="!canSubmit" @tap="onSubmit">
-      记录今日穿着
-    </button>
   </view>
 </template>
 
@@ -266,28 +261,28 @@ onShow(async () => {
 .page {
   min-height: 100vh;
   background: #f7f7f8;
-  padding: 24rpx;
-  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+  padding: 20rpx;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
 .date-bar {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 12rpx;
   display: flex;
   align-items: baseline;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
 .date-label {
-  font-size: 28rpx;
+  font-size: 24rpx;
   color: #888;
 }
 
 .date-val {
-  font-size: 36rpx;
+  font-size: 30rpx;
   font-weight: 600;
   color: #222;
 }
@@ -296,15 +291,15 @@ onShow(async () => {
   display: flex;
   background: #fff;
   border-radius: 999rpx;
-  padding: 6rpx;
-  margin-bottom: 20rpx;
+  padding: 4rpx;
+  margin-bottom: 12rpx;
 }
 
 .mode-tab {
   flex: 1;
   text-align: center;
-  padding: 16rpx 0;
-  font-size: 28rpx;
+  padding: 10rpx 0;
+  font-size: 24rpx;
   color: #666;
   border-radius: 999rpx;
 
@@ -317,24 +312,24 @@ onShow(async () => {
 
 .hint {
   display: block;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999;
-  margin-bottom: 16rpx;
+  margin-bottom: 10rpx;
 }
 
 .today-block {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: 12rpx;
+  padding: 14rpx 18rpx;
+  margin-bottom: 12rpx;
 }
 
 .block-title {
-  font-size: 26rpx;
+  font-size: 22rpx;
   font-weight: 600;
   color: #333;
   display: block;
-  margin-bottom: 12rpx;
+  margin-bottom: 8rpx;
 }
 
 .today-item {
@@ -346,71 +341,56 @@ onShow(async () => {
 }
 
 .today-meta {
-  font-size: 26rpx;
+  font-size: 22rpx;
   color: #555;
 }
 
 .today-del {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #ff2442;
 }
 
-.cloth-filter {
+.cloth-filter-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
   align-items: center;
-  margin-bottom: 8rpx;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+  flex-wrap: nowrap;
 }
 
-.fchip {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 8rpx 14rpx;
+.filter-picker {
+  flex: 0 0 auto;
+}
+
+.chip {
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
   background: #fff;
   border-radius: 999rpx;
-  border: 2rpx solid transparent;
+  border: 1rpx solid #eee;
+  color: #333;
+  white-space: nowrap;
 
   &.active {
+    color: #ff2442;
+    font-weight: 600;
     background: #fff5f6;
     border-color: #ffcdd2;
   }
 }
 
-.fchip .chip-k {
-  font-size: 22rpx;
-  color: #888;
-}
-
-.fchip .chip-v {
-  font-size: 24rpx;
-  color: #333;
-}
-
-.fchip.active .chip-v {
-  color: #ff2442;
-  font-weight: 600;
-}
-
-.fchip .chip-a {
+.filter-reset {
   font-size: 20rpx;
-  color: #bbb;
-}
-
-.cloth-filter-reset,
-.filter-hint {
-  font-size: 24rpx;
-  color: #999;
-}
-
-.cloth-filter-reset {
   color: #ff2442;
+  flex-shrink: 0;
 }
 
-.filter-hint {
-  display: block;
-  margin-bottom: 16rpx;
+.filter-stats {
+  margin-left: auto;
+  font-size: 20rpx;
+  color: #999;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pick-grid {
@@ -434,7 +414,7 @@ onShow(async () => {
 
 .pick-img {
   width: 100%;
-  height: 180rpx;
+  height: 160rpx;
   display: block;
   background: #f0f0f0;
 }
@@ -479,9 +459,9 @@ onShow(async () => {
   display: flex;
   align-items: center;
   background: #fff;
-  border-radius: 16rpx;
-  padding: 16rpx;
-  margin-bottom: 12rpx;
+  border-radius: 12rpx;
+  padding: 12rpx;
+  margin-bottom: 10rpx;
   border: 3rpx solid transparent;
 
   &.selected {
@@ -496,8 +476,8 @@ onShow(async () => {
 }
 
 .match-thumb {
-  width: 72rpx;
-  height: 72rpx;
+  width: 64rpx;
+  height: 64rpx;
   border-radius: 8rpx;
   background: #f0f0f0;
 }
@@ -507,26 +487,26 @@ onShow(async () => {
 }
 
 .match-name {
-  font-size: 28rpx;
+  font-size: 24rpx;
   font-weight: 600;
   color: #222;
   display: block;
 }
 
 .match-sub {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999;
 }
 
 .match-check {
-  width: 40rpx;
-  height: 40rpx;
+  width: 36rpx;
+  height: 36rpx;
   background: #ff2442;
   color: #fff;
   border-radius: 50%;
   text-align: center;
-  line-height: 40rpx;
-  font-size: 24rpx;
+  line-height: 36rpx;
+  font-size: 22rpx;
 }
 
 .empty {
@@ -539,7 +519,9 @@ onShow(async () => {
 
 .btn {
   border-radius: 999rpx;
-  font-size: 30rpx;
+  font-size: 26rpx;
+  height: 72rpx;
+  line-height: 72rpx;
 
   &.primary {
     background: #ff2442;
@@ -549,5 +531,9 @@ onShow(async () => {
   &[disabled] {
     opacity: 0.45;
   }
+}
+
+.save-bar {
+  margin-bottom: 12rpx;
 }
 </style>
