@@ -1,0 +1,9 @@
+# 原生 Android 工程（android-native/）
+
+- **独立工程**：Kotlin + Compose + JSON 本地存储（无 Room/KSP），用 Android Studio 打开 `android-native/`。
+- **包名**：`com.cloth.wardrobe`
+- **ZIP 导入导出**：`ZipBundleExporter` / `ZipBundleImporter`，格式 version 3，与 `utils/zipBundle.js` 一致。
+- **导出路径**：`Download/wardrobe_export.zip`（MediaStore / 标准文件 API），勿再用 HBuilder `plus.downloader` / `getFileSystemManager`。
+- **uni-app App 基座**：ZIP 导出仍可能失败；真机发布 ZIP 能力以原生工程为准。
+- **迭代**：UI 逐步对齐 `pages/`；数据存 `files/data/*.json`，与 uni-app localStorage 思路一致。
+- **UI**：紧凑布局、白底筛选/弹窗、一行收纳等见 **`ui-layout.mdc`**；确认弹窗用 `AppAlertDialog`。

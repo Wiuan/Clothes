@@ -13,21 +13,18 @@
         </view>
       </view>
       <view class="season-row">
-        <picker :range="seasonOpts" :value="seasonIdx" @change="onSeasonPick">
-          <view class="chip" :class="{ active: !!filterSeason }">
-            <text class="chip-k">衣物季节</text>
-            <text class="chip-v">{{ seasonLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+        <picker class="filter-picker" :range="seasonOpts" :value="seasonIdx" @change="onSeasonPick">
+          <view class="chip" :class="{ active: !!filterSeason }">{{ seasonLabel }} ▾</view>
         </picker>
         <text class="summary">
-          {{ periodLabel }} · {{ rankList.length }} 件 · 未穿 {{ unwornCount }} 件
+          {{ periodLabel }}·{{ rankList.length }}件·未穿{{ unwornCount }}
         </text>
       </view>
-    </view>
-
-    <view class="tip-bar">
-      <text>按穿着次数从少到多排列，方便找出「压箱底」的衣服</text>
+      <view class="sort-row">
+        <view class="sort-chip" :class="{ active: sortAsc }" @tap="sortAsc = true">少→多</view>
+        <view class="sort-chip" :class="{ active: !sortAsc }" @tap="sortAsc = false">多→少</view>
+      </view>
+      <text class="tip-inline">{{ sortTip }}</text>
     </view>
 
     <view v-if="rankList.length" class="list">
@@ -83,6 +80,7 @@ const seasonOpts = [ALL, ...SEASONS]
 
 const periodKey = ref('365d')
 const filterSeason = ref('')
+const sortAsc = ref(true)
 const logs = ref([])
 
 const seasonIdx = computed(() =>
@@ -97,11 +95,18 @@ const rankList = computed(() =>
   buildWearRankList(getClothes().filter((c) => c.status !== 'discarded'), logs.value, {
     startMs: period.value.startMs,
     endMs: period.value.endMs,
-    season: filterSeason.value
+    season: filterSeason.value,
+    ascending: sortAsc.value
   })
 )
 
 const unwornCount = computed(() => rankList.value.filter((r) => r.count === 0).length)
+
+const sortTip = computed(() =>
+  sortAsc.value
+    ? '按穿着次数从少到多，方便找出「压箱底」的衣服'
+    : '按穿着次数从多到少，查看最常穿衣物'
+)
 
 function onSeasonPick(e) {
   const v = seasonOpts[e.detail.value]
@@ -127,20 +132,20 @@ onShow(async () => {
 
 .filter-panel {
   background: #fff;
-  padding: 20rpx 24rpx;
+  padding: 14rpx 18rpx;
   border-bottom: 1rpx solid #eee;
 }
 
 .period-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
 }
 
 .period-chip {
-  padding: 10rpx 20rpx;
-  font-size: 26rpx;
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
   color: #666;
   background: #f7f7f8;
   border-radius: 999rpx;
@@ -158,67 +163,82 @@ onShow(async () => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
-.chip {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 8rpx 14rpx;
-  background: #f7f7f8;
+.filter-picker {
+  flex: 0 0 auto;
+}
+
+.season-row .chip {
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
+  background: #fff;
   border-radius: 999rpx;
-  border: 2rpx solid transparent;
+  border: 1rpx solid #eee;
+  color: #333;
+  white-space: nowrap;
 
   &.active {
+    color: #ff2442;
+    font-weight: 600;
     background: #fff5f6;
     border-color: #ffcdd2;
   }
 }
 
-.chip-k {
-  font-size: 22rpx;
-  color: #888;
-}
-
-.chip-v {
-  font-size: 24rpx;
-  color: #333;
-}
-
-.chip.active .chip-v {
-  color: #ff2442;
-  font-weight: 600;
-}
-
-.chip-a {
-  font-size: 20rpx;
-  color: #bbb;
-}
-
 .summary {
-  font-size: 24rpx;
+  flex: 1;
+  min-width: 0;
+  font-size: 20rpx;
   color: #999;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tip-bar {
-  padding: 16rpx 24rpx;
-  font-size: 24rpx;
+.sort-row {
+  display: flex;
+  gap: 8rpx;
+  margin-top: 10rpx;
+}
+
+.sort-chip {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  color: #666;
+  background: #f7f7f8;
+  border-radius: 999rpx;
+  border: 2rpx solid transparent;
+
+  &.active {
+    color: #ff2442;
+    background: #fff5f6;
+    border-color: #ffcdd2;
+    font-weight: 600;
+  }
+}
+
+.tip-inline {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 20rpx;
   color: #888;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .list {
-  padding: 0 24rpx 24rpx;
+  padding: 6rpx 18rpx 18rpx;
 }
 
 .row {
   display: flex;
   align-items: center;
   background: #fff;
-  border-radius: 16rpx;
-  padding: 16rpx;
-  margin-bottom: 12rpx;
+  border-radius: 12rpx;
+  padding: 10rpx;
+  margin-bottom: 6rpx;
 
   &.unworn {
     background: #fffafa;
@@ -227,8 +247,8 @@ onShow(async () => {
 }
 
 .thumb {
-  width: 100rpx;
-  height: 100rpx;
+  width: 80rpx;
+  height: 80rpx;
   border-radius: 12rpx;
   flex-shrink: 0;
   background: #f0f0f0;
@@ -244,12 +264,12 @@ onShow(async () => {
 
 .info {
   flex: 1;
-  margin-left: 16rpx;
+  margin-left: 12rpx;
   min-width: 0;
 }
 
 .name {
-  font-size: 28rpx;
+  font-size: 24rpx;
   font-weight: 600;
   color: #222;
   display: block;
@@ -259,17 +279,17 @@ onShow(async () => {
 }
 
 .meta {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999;
   display: block;
-  margin-top: 4rpx;
+  margin-top: 0;
 }
 
 .last {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #bbb;
   display: block;
-  margin-top: 4rpx;
+  margin-top: 2rpx;
 }
 
 .row.unworn .last {
@@ -283,7 +303,7 @@ onShow(async () => {
 }
 
 .count {
-  font-size: 40rpx;
+  font-size: 32rpx;
   font-weight: 700;
   color: #ff2442;
   display: block;
@@ -299,14 +319,14 @@ onShow(async () => {
 }
 
 .count-unit {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #999;
 }
 
 .empty {
-  padding: 120rpx 40rpx;
+  padding: 100rpx 32rpx;
   text-align: center;
   color: #999;
-  font-size: 28rpx;
+  font-size: 24rpx;
 }
 </style>

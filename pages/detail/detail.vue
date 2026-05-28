@@ -1,6 +1,13 @@
 <template>
-
-  <view v-if="item" class="page">
+  <swiper
+    v-if="orderedIds.length"
+    class="detail-swiper"
+    :current="pagerIndex"
+    :disable-touch="orderedIds.length <= 1"
+    @change="onPagerChange"
+  >
+    <swiper-item v-for="(id, idx) in orderedIds" :key="id">
+      <scroll-view v-if="idx === pagerIndex && item" scroll-y class="page" :show-scrollbar="true">
 
     <image
 
@@ -75,16 +82,19 @@
         >
           今天穿了这件
         </button>
-        <view v-else class="wear-checkin-done">
+        <view v-else class="wear-checkin-done" @tap="onCheckinToday">
           <text class="done-icon">✓</text>
-          <text>今日已记录</text>
+          <view class="done-text">
+            <text>今日已记录</text>
+            <text class="cancel-hint">再次点击取消</text>
+          </view>
         </view>
         <text class="wear-go" @tap="goWearStats">查看穿着排行 →</text>
       </view>
 
       <view v-if="!isDiscarded && colorRec.ready" class="color-rec-block">
         <text class="section-title">颜色搭配参考</text>
-        <text class="rec-hint">已关联的灵感优先展示；其余为同季节且主色相近的灵感</text>
+        <text class="rec-hint">已关联灵感优先；其余主色相近的灵感按本件季节优先排序，左右滑动查看全部</text>
 
         <text class="rec-subtitle">相关灵感</text>
         <scroll-view v-if="colorRec.matchedInspirations.length" scroll-x class="rec-scroll" :show-scrollbar="false">
@@ -107,14 +117,12 @@
           </view>
         </scroll-view>
         <text v-else class="rec-empty">暂无匹配灵感，请为灵感填写主色标签</text>
-        <text v-if="colorRec.matchedTotal > colorRec.matchedInspirations.length" class="rec-more">
-          还有 {{ colorRec.matchedTotal - colorRec.matchedInspirations.length }} 条，可在灵感库筛选查看
-        </text>
 
         <text class="rec-subtitle section-gap">可搭配单品</text>
         <text v-if="colorRec.palette.length" class="palette-line">
           搭配色：{{ colorRec.palette.join(' · ') }}
         </text>
+        <text v-if="colorRec.companions.length" class="rec-count">共 {{ colorRec.companions.length }} 件，左右滑动查看</text>
         <scroll-view v-if="colorRec.companions.length" scroll-x class="rec-scroll" :show-scrollbar="false">
           <view
             v-for="c in colorRec.companions"
@@ -135,9 +143,6 @@
         </scroll-view>
         <text v-else-if="colorRec.matchedInspirations.length" class="rec-empty">
           相关灵感暂无辅色/点缀，或衣柜里还没有同搭配色的{{ item.season }}单品
-        </text>
-        <text v-if="colorRec.companionTotal > colorRec.companions.length" class="rec-more">
-          还有 {{ colorRec.companionTotal - colorRec.companions.length }} 件可搭配
         </text>
       </view>
 
@@ -189,11 +194,11 @@
 
 
     <button class="del-btn" @tap="onDelete">永久删除</button>
-
-  </view>
-
+      </scroll-view>
+      <view v-else-if="idx === pagerIndex" class="loading">加载中...</view>
+    </swiper-item>
+  </swiper>
   <view v-else class="loading">加载中...</view>
-
 </template>
 
 
@@ -221,9 +226,12 @@ import { formatTempRange } from '../../utils/models.js'
 import { isDiscarded as checkDiscarded, CLOTH_STATUS } from '../../utils/constants.js'
 
 import { buildClothDetailSections } from '../../utils/clothFields.js'
+import { getClothBrowseIds } from '../../utils/browseOrder.js'
 import {
   getWearLogs,
   addWearLog,
+  removeWearLog,
+  getWearLogsForDate,
   todayDateStr,
   isClothWornOnDate
 } from '../../utils/checkinStorage.js'
@@ -248,6 +256,8 @@ const colorRec = ref({
 })
 
 let clothId = ''
+const orderedIds = ref([])
+const pagerIndex = ref(0)
 
 
 
@@ -305,7 +315,15 @@ function refreshWearStats() {
 }
 
 function onCheckinToday() {
-  if (!clothId || wornToday.value) return
+  if (!clothId) return
+  if (wornToday.value) {
+    const log = getWearLogsForDate(todayDateStr()).find((l) => l.clothIds.includes(clothId))
+    if (log) removeWearLog(log.id)
+    wornToday.value = false
+    refreshWearStats()
+    uni.showToast({ title: '已取消今日记录', icon: 'none' })
+    return
+  }
   addWearLog({
     date: todayDateStr(),
     type: 'single',
@@ -358,12 +376,60 @@ function goInspiration(id) {
 
 function goClothDetail(id) {
   if (id === clothId) return
+  if (orderedIds.value.includes(id)) {
+    clothId = id
+    pagerIndex.value = orderedIds.value.indexOf(id)
+    loadItem(false)
+    return
+  }
   uni.navigateTo({ url: `/pages/detail/detail?id=${id}` })
 }
 
-async function loadItem() {
+function buildBrowseIds() {
+  const cur = getClothById(clothId)
+  if (!cur) {
+    orderedIds.value = []
+    return
+  }
+  const cached = getClothBrowseIds(clothId)
+  if (cached) {
+    orderedIds.value = cached
+    pagerIndex.value = cached.indexOf(clothId)
+    return
+  }
+  const pool = checkDiscarded(cur)
+    ? getClothes().filter((c) => c.status === 'discarded')
+    : getClothes().filter((c) => c.status !== 'discarded')
+  orderedIds.value = pool
+    .slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map((c) => c.id)
+  const idx = orderedIds.value.indexOf(clothId)
+  pagerIndex.value = idx >= 0 ? idx : 0
+}
+
+function updateNavTitle() {
+  if (orderedIds.value.length <= 1) {
+    uni.setNavigationBarTitle({ title: '衣服详情' })
+    return
+  }
+  uni.setNavigationBarTitle({
+    title: `衣服详情 (${pagerIndex.value + 1}/${orderedIds.value.length})`
+  })
+}
+
+function onPagerChange(e) {
+  const idx = e.detail.current
+  if (idx === pagerIndex.value) return
+  pagerIndex.value = idx
+  clothId = orderedIds.value[idx] || clothId
+  loadItem(false)
+}
+
+async function loadItem(resetPager = true) {
   item.value = getClothById(clothId)
   if (!item.value) {
+    orderedIds.value = []
     uni.showToast({ title: '未找到该衣服', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 800)
     return
@@ -374,6 +440,12 @@ async function loadItem() {
   imgTick.value = getImageLoadTick()
   refreshWearStats()
   refreshColorRec()
+  if (resetPager) buildBrowseIds()
+  else {
+    const idx = orderedIds.value.indexOf(clothId)
+    if (idx >= 0) pagerIndex.value = idx
+  }
+  updateNavTitle()
 }
 
 
@@ -472,6 +544,11 @@ function onDelete() {
 
 <style lang="scss" scoped>
 
+.detail-swiper {
+  height: 100vh;
+  width: 100%;
+}
+
 .page {
 
   min-height: 100vh;
@@ -479,6 +556,8 @@ function onDelete() {
   background: #f7f7f8;
 
   padding-bottom: 48rpx;
+
+  box-sizing: border-box;
 
 }
 
@@ -716,6 +795,19 @@ function onDelete() {
   font-weight: 700;
 }
 
+.wear-checkin-done .done-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+}
+
+.wear-checkin-done .cancel-hint {
+  font-size: 22rpx;
+  color: #66bb6a;
+  margin-top: 4rpx;
+}
+
 .wear-go {
   display: block;
   font-size: 26rpx;
@@ -738,6 +830,13 @@ function onDelete() {
   color: #999;
   line-height: 1.5;
   margin-bottom: 16rpx;
+}
+
+.rec-count {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+  margin-bottom: 8rpx;
 }
 
 .rec-subtitle {

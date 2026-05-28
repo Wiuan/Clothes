@@ -15,39 +15,29 @@
         {{ isEdit ? '保存修改' : '保存搭配' }}
       </button>
 
-      <text class="label section">选择衣服（已选 {{ selectedIds.length }} 件）</text>
+      <text class="label section">选择衣服</text>
 
-      <view class="cloth-filter">
-        <picker :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
-          <view class="fchip" :class="{ active: !!clothFilterSeason }">
-            <text class="chip-k">季节</text>
-            <text class="chip-v">{{ clothSeasonLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+      <view class="cloth-filter-row">
+        <picker class="filter-picker" :range="clothSeasonOpts" :value="clothSeasonIdx" @change="onClothSeasonPick">
+          <view class="chip" :class="{ active: !!clothFilterSeason }">{{ clothSeasonLabel }} ▾</view>
         </picker>
-        <picker :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
-          <view class="fchip" :class="{ active: !!clothFilterType }">
-            <text class="chip-k">类型</text>
-            <text class="chip-v">{{ clothTypeLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+        <picker class="filter-picker" :range="clothTypeOpts" :value="clothTypeIdx" @change="onClothTypePick">
+          <view class="chip" :class="{ active: !!clothFilterType }">{{ clothTypeLabel }} ▾</view>
         </picker>
-        <picker :range="clothColorOpts" :value="clothColorIdx" @change="onClothColorPick">
-          <view class="fchip" :class="{ active: !!clothFilterColor }">
-            <text class="chip-k">颜色</text>
-            <text class="chip-v">{{ clothColorLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
+        <picker class="filter-picker" :range="clothColorOpts" :value="clothColorIdx" @change="onClothColorPick">
+          <view class="chip" :class="{ active: !!clothFilterColor }">{{ clothColorLabel }} ▾</view>
         </picker>
         <text
           v-if="clothFilterSeason || clothFilterType || clothFilterColor"
-          class="cloth-filter-reset"
+          class="filter-reset"
           @tap="resetClothFilter"
         >
           重置
         </text>
+        <text class="filter-stats">
+          已选{{ selectedIds.length }}·{{ filteredClothes.length }}/{{ allClothes.length }}
+        </text>
       </view>
-      <text class="cloth-filter-hint">显示 {{ filteredClothes.length }} / {{ allClothes.length }} 件</text>
 
       <view class="pick-grid">
         <view
@@ -455,59 +445,47 @@ function onDeleteMatch() {
   box-sizing: border-box;
 }
 
-.cloth-filter {
+.cloth-filter-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
   align-items: center;
-  margin-bottom: 8rpx;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+  flex-wrap: nowrap;
 }
 
-.fchip {
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 8rpx 14rpx;
+.filter-picker {
+  flex: 0 0 auto;
+}
+
+.chip {
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
   background: #fff;
   border-radius: 999rpx;
-  border: 2rpx solid transparent;
+  border: 1rpx solid #eee;
+  color: #333;
+  white-space: nowrap;
 
   &.active {
+    color: #ff2442;
+    font-weight: 600;
     background: #fff5f6;
     border-color: #ffcdd2;
   }
 }
 
-.fchip .chip-k {
-  font-size: 22rpx;
-  color: #888;
-}
-
-.fchip .chip-v {
-  font-size: 24rpx;
-  color: #333;
-}
-
-.fchip.active .chip-v {
-  color: #ff2442;
-  font-weight: 600;
-}
-
-.fchip .chip-a {
+.filter-reset {
   font-size: 20rpx;
-  color: #bbb;
-}
-
-.cloth-filter-reset {
-  font-size: 24rpx;
   color: #ff2442;
+  flex-shrink: 0;
 }
 
-.cloth-filter-hint {
-  display: block;
-  font-size: 22rpx;
+.filter-stats {
+  margin-left: auto;
+  font-size: 20rpx;
   color: #999;
-  margin-bottom: 16rpx;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn {

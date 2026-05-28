@@ -33,6 +33,12 @@ export function getLinkedInspirations(cloth, inspirations) {
  * 同季节（或未填季节）且灵感主色与衣物颜色有交集
  * @param {Set<string>} [excludeIds] 已列入的灵感 id（避免与已关联重复）
  */
+function unlinkedInspirationSeasonRank(clothSeason, inspSeason) {
+  if (!inspSeason) return 0
+  if (inspSeason === clothSeason) return 0
+  return 1
+}
+
 export function getColorMatchedInspirations(cloth, inspirations, excludeIds = new Set()) {
   if (!cloth) return []
   const clothColors = getItemColors(cloth)
@@ -41,12 +47,16 @@ export function getColorMatchedInspirations(cloth, inspirations, excludeIds = ne
   return (inspirations || [])
     .filter((insp) => {
       if (excludeIds.has(insp.id)) return false
-      if (!seasonsMatch(cloth.season, insp.season)) return false
       const primary = tagList(insp.colorTags, 'primary')
       if (!primary.length) return false
       return colorsOverlap(clothColors, primary)
     })
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .sort((a, b) => {
+      const sa = unlinkedInspirationSeasonRank(cloth.season, a.season)
+      const sb = unlinkedInspirationSeasonRank(cloth.season, b.season)
+      if (sa !== sb) return sa - sb
+      return (b.createdAt || 0) - (a.createdAt || 0)
+    })
 }
 
 /** 已关联优先，其余为主色相近的灵感 */
@@ -128,12 +138,7 @@ export function getCompanionClothes(cloth, allClothes, palette) {
  * @param {object[]} inspirations
  * @param {import('./models.js').ClothItem[]} allClothes
  */
-export function buildColorRecommendations(
-  cloth,
-  inspirations,
-  allClothes,
-  { maxInsp = 8, maxCloth = 10 } = {}
-) {
+export function buildColorRecommendations(cloth, inspirations, allClothes) {
   const clothColors = getItemColors(cloth)
   const linkedInspirations = getLinkedInspirations(cloth, inspirations)
   const matchedInspirations = getMatchedInspirations(cloth, inspirations)
@@ -142,8 +147,8 @@ export function buildColorRecommendations(
 
   return {
     ready: !!clothColors.length || linkedInspirations.length > 0,
-    matchedInspirations: matchedInspirations.slice(0, maxInsp),
-    companions: companions.slice(0, maxCloth),
+    matchedInspirations,
+    companions,
     palette,
     matchedTotal: matchedInspirations.length,
     companionTotal: companions.length

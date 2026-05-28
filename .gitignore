@@ -4,3 +4,9 @@ unpackage/
 .DS_Store
 *.log
 .hbuilderx/
+
+# 原生 Android（Android Studio）
+android-native/.gradle/
+android-native/.idea/
+android-native/**/build/
+android-native/local.properties

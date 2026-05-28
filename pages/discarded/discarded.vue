@@ -6,10 +6,10 @@
 
     <view class="filter-panel">
       <view class="filter-row">
-        <picker :range="seasonOpts" :value="seasonIdx" @change="onSeasonPick">
+        <picker class="filter-picker" :range="seasonOpts" :value="seasonIdx" @change="onSeasonPick">
           <view class="chip">{{ seasonLabel }} ▾</view>
         </picker>
-        <picker :range="typeOpts" :value="typeIdx" @change="onTypePick">
+        <picker class="filter-picker" :range="typeOpts" :value="typeIdx" @change="onTypePick">
           <view class="chip">{{ typeLabel }} ▾</view>
         </picker>
         <text class="reset" @tap="resetFilter">重置</text>
@@ -104,40 +104,47 @@ function goDetail(item) {
 
 .tip-bar {
   background: #fff8e6;
-  padding: 20rpx 24rpx;
-  font-size: 24rpx;
+  padding: 14rpx 20rpx;
+  font-size: 22rpx;
   color: #996600;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .filter-panel {
   background: #fff;
-  padding: 16rpx 20rpx;
+  padding: 12rpx 16rpx;
 }
 
 .filter-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12rpx;
+  gap: 10rpx;
+}
+
+.filter-picker {
+  flex: 0 0 auto;
 }
 
 .chip {
-  font-size: 24rpx;
-  padding: 8rpx 18rpx;
-  background: #f7f7f8;
+  font-size: 22rpx;
+  padding: 6rpx 14rpx;
+  background: #fff;
+  border: 1rpx solid #eee;
   border-radius: 999rpx;
+  white-space: nowrap;
 }
 
 .reset {
   margin-left: auto;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #ff2442;
+  flex-shrink: 0;
 }
 
 .count-bar {
-  padding: 12rpx 20rpx;
-  font-size: 22rpx;
+  padding: 8rpx 16rpx;
+  font-size: 20rpx;
   color: #888;
 }
 
@@ -152,6 +159,6 @@ function goDetail(item) {
   padding: 120rpx 40rpx;
   text-align: center;
   color: #999;
-  font-size: 28rpx;
+  font-size: 24rpx;
 }
 </style>

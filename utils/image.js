@@ -44,6 +44,11 @@ function pathToDataUrlViaPlus(filePath, mime) {
       reject(new Error('plus.io 不可用'))
       return
     }
+    const p = String(filePath || '')
+    if (p.startsWith('content://')) {
+      reject(new Error('无法读取该图片路径'))
+      return
+    }
     plus.io.resolveLocalFileSystemURL(
       filePath,
       (entry) => {

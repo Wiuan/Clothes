@@ -9,16 +9,51 @@ import { replaceAllWearLogs, wearLogsForExport } from './checkinStorage.js'
 import { ensureBase64UnderLimit, base64ByteSize, MAX_IMAGE_BYTES } from './image.js'
 import { normalizeClothV2, normalizeMatchV2 } from './models.js'
 import { getImage, saveImage, clothImageRef } from './imageStore.js'
+import JSZip from 'jszip'
 import {
   writeJsonToDoc,
   finishExportForApp,
   pickJsonFileApp,
   readAppLocalBackup,
-  readBigFileUtf8
+  readBigFileUtf8,
+  exportZipApp,
+  pickZipFileApp,
+  readAppLocalZipBackup,
+  sanitizeBase64ForAndroid
 } from './appIo.js'
+import {
+  BUNDLE_FORMAT_ZIP,
+  buildManifestPayload,
+  calcPercent,
+  collectImageRefs,
+  yieldToUi,
+  zipImagePath
+} from './zipBundle.js'
+import { APP_EXPORT_DOWNLOAD_FILE, APP_EXPORT_DOWNLOAD_ZIP_FILE } from './constants.js'
 
 const EXPORT_NAME = 'wardrobe_export.json'
+const EXPORT_ZIP_NAME = 'wardrobe_export.zip'
 const BUNDLE_VERSION = 3
+
+/** 导出成功弹窗展示的路径（优先手机「下载」目录） */
+function formatExportDisplayPath(writeResult, zip = true) {
+  const fallback = zip ? APP_EXPORT_DOWNLOAD_ZIP_FILE : APP_EXPORT_DOWNLOAD_FILE
+  if (!writeResult) return fallback
+  if (typeof writeResult === 'string') return writeResult
+  if (writeResult.usedDownloadDir && writeResult.publicAbsPath) return writeResult.publicAbsPath
+  if (writeResult.publicAbsPath) return writeResult.publicAbsPath
+  if (writeResult.absPath) return writeResult.absPath
+  return fallback
+}
+
+function showExportSuccessModal(displayPath, fileSizeKb, extraLine = '') {
+  const tail = extraLine ? `\n\n${extraLine}` : ''
+  uni.showModal({
+    title: '导出成功',
+    content: `文件已保存至：\n${displayPath}\n\n大小：约 ${fileSizeKb} KB${tail}`,
+    showCancel: false
+  })
+}
 
 function getExportPath() {
   // #ifdef MP-WEIXIN
@@ -421,28 +456,23 @@ export async function exportJson() {
       throw new Error(msg.includes('空') ? msg : '写入文件失败，请重试')
     }
 
-    const absPath =
-      typeof writeResult === 'string' ? writeResult : writeResult && writeResult.absPath
-    if (!absPath) {
-      throw new Error('写入文件失败，未获得路径')
-    }
     const fileSize =
       typeof writeResult === 'object' && writeResult && writeResult.size
         ? writeResult.size
         : json.length
     const fileSizeKb = Math.max(1, Math.round(fileSize / 1024))
-    const exportPath = finishExportForApp(absPath)
+    const displayPath = formatExportDisplayPath(writeResult, false)
+    if (!displayPath) {
+      throw new Error('写入文件失败，未获得路径')
+    }
+    const exportPath = finishExportForApp(displayPath)
     try {
       uni.setStorageSync('wardrobe_last_export_abs', exportPath)
     } catch {
       /* ignore */
     }
 
-    uni.showModal({
-      title: '导出成功',
-      content: `文件位置：\n${exportPath}\n\n大小：约 ${fileSizeKb} KB`,
-      showCancel: false
-    })
+    showExportSuccessModal(exportPath, fileSizeKb)
 
     return {
       count: clothes.length,
@@ -490,6 +520,7 @@ export async function exportJson() {
 
 function setImportProgress(title) {
   try {
+    uni.hideLoading()
     uni.showLoading({ title: String(title || '导入中...'), mask: true })
   } catch {
     /* ignore */
@@ -808,4 +839,500 @@ export function importJson() {
       .then((path) => handleFile(path))
       .catch(onFail)
   })
+}
+
+function setExportProgress(title) {
+  try {
+    uni.hideLoading()
+    uni.showLoading({ title: String(title || '打包中...'), mask: true })
+  } catch {
+    /* ignore */
+  }
+}
+
+function dataUrlToBase64(dataUrl) {
+  const raw = String(dataUrl || '')
+  const comma = raw.indexOf(',')
+  return comma >= 0 ? raw.slice(comma + 1) : raw
+}
+
+function normalizeZipManifest(manifest) {
+  if (!manifest || typeof manifest !== 'object') return null
+  if (Number(manifest.version) !== BUNDLE_VERSION) return null
+  return {
+    clothes: Array.isArray(manifest.clothes) ? manifest.clothes : [],
+    matches: Array.isArray(manifest.matches) ? manifest.matches : [],
+    inspirations: Array.isArray(manifest.inspirations) ? manifest.inspirations : [],
+    wearLogs: Array.isArray(manifest.wearLogs) ? manifest.wearLogs : [],
+    images: manifest.images && typeof manifest.images === 'object' ? manifest.images : {}
+  }
+}
+
+function readFileAsArrayBufferH5(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+function chooseZipFileH5() {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.zip,application/zip'
+    input.style.display = 'none'
+    document.body.appendChild(input)
+    const cleanup = () => input.remove()
+    input.onchange = () => {
+      const file = input.files && input.files[0]
+      cleanup()
+      if (!file) {
+        reject(new Error('cancel'))
+        return
+      }
+      if (typeof file.arrayBuffer === 'function') {
+        file.arrayBuffer().then(resolve).catch(reject)
+        return
+      }
+      readFileAsArrayBufferH5(file).then(resolve).catch(reject)
+    }
+    input.oncancel = () => {
+      cleanup()
+      reject(new Error('cancel'))
+    }
+    input.click()
+  })
+}
+
+async function pickZipFileCrossPlatform() {
+  // #ifdef H5
+  try {
+    return await chooseZipFileH5()
+  } catch (e) {
+    if (e && e.message === 'cancel') throw e
+  }
+  // #endif
+
+  const picked = await pickZipFileUni()
+  // #ifdef H5
+  if (picked.h5File) {
+    if (typeof picked.h5File.arrayBuffer === 'function') {
+      return await picked.h5File.arrayBuffer()
+    }
+    return await readFileAsArrayBufferH5(picked.h5File)
+  }
+  // #endif
+  return await readBinaryFile(picked.filePath, picked.h5File)
+}
+
+async function runZipImport(buffer) {
+  if (!buffer || buffer.byteLength < 10) {
+    uni.showToast({ title: 'ZIP 文件为空', icon: 'none' })
+    throw new Error('empty zip')
+  }
+  uni.showLoading({ title: '导入中...', mask: true })
+  try {
+    return await importZipFromBuffer(buffer)
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+function pickZipFileUni() {
+  return new Promise((resolve, reject) => {
+    const onSuccess = (res) => {
+      const tf = res.tempFiles && res.tempFiles[0]
+      const path =
+        (res.tempFilePaths && res.tempFilePaths[0]) ||
+        (tf && (tf.path || tf.filePath || tf.tempFilePath))
+      if (path) resolve({ filePath: path, h5File: tf && (tf.file || tf) })
+      else reject(new Error('无文件路径'))
+    }
+
+    const tryChoose = (opts, next) => {
+      if (typeof uni.chooseFile !== 'function') {
+        next && next()
+        return
+      }
+      uni.chooseFile({
+        count: 1,
+        ...opts,
+        success: onSuccess,
+        fail: (err) => {
+          if (next) next()
+          else reject(err)
+        }
+      })
+    }
+
+    tryChoose({ type: 'all', extension: ['.zip'] }, () => {
+      tryChoose({ type: 'file' }, () => {
+        tryChoose({}, () => reject(new Error('chooseFile unsupported')))
+      })
+    })
+  })
+}
+
+function toArrayBuffer(data) {
+  if (!data) throw new Error('文件为空')
+  if (data instanceof ArrayBuffer) return data
+  if (ArrayBuffer.isView(data)) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+  }
+  if (typeof data === 'string') {
+    const bytes = new Uint8Array(data.length)
+    for (let i = 0; i < data.length; i++) {
+      bytes[i] = data.charCodeAt(i) & 0xff
+    }
+    return bytes.buffer
+  }
+  throw new Error('无法解析二进制内容')
+}
+
+async function readBinaryFile(filePath, h5File) {
+  // #ifdef H5
+  if (h5File) {
+    if (typeof h5File.arrayBuffer === 'function') {
+      return await h5File.arrayBuffer()
+    }
+    if (h5File instanceof Blob) {
+      return await readFileAsArrayBufferH5(h5File)
+    }
+  }
+  if (filePath && (filePath.startsWith('blob:') || filePath.startsWith('http'))) {
+    const res = await fetch(filePath)
+    return await res.arrayBuffer()
+  }
+  // #endif
+
+  const localPath = normalizeJsonFilePath(filePath)
+  const fs = uni.getFileSystemManager && uni.getFileSystemManager()
+  if (!fs) throw new Error('当前环境无法读取文件')
+  return await new Promise((resolve, reject) => {
+    fs.readFile({
+      filePath: localPath,
+      success: (res) => {
+        try {
+          resolve(toArrayBuffer(res.data))
+        } catch (e) {
+          reject(e)
+        }
+      },
+      fail: reject
+    })
+  })
+}
+
+async function buildZipExportPayload() {
+  const list = getClothes()
+  const matches = getMatches()
+  const inspirations = getInspirations()
+  if (!list.length && !matches.length && !inspirations.length) {
+    uni.showToast({ title: '暂无数据可导出', icon: 'none' })
+    throw new Error('empty')
+  }
+
+  const clothes = list.map((item) => clothMetaForExport(item))
+  const matchExport = matches.map((m) => ({
+    id: m.id,
+    name: m.name,
+    clothIds: [...m.clothIds],
+    note: m.note,
+    createdAt: m.createdAt
+  }))
+  const inspirationExport = inspirations.map((item) => inspirationMetaForExport(item))
+  const refs = collectImageRefs(clothes, inspirationExport)
+  const images = {}
+  const zip = new JSZip()
+
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i]
+    const dataUrl = await getImage(ref)
+    if (!dataUrl) continue
+    let limited = dataUrl
+    try {
+      limited = await ensureBase64UnderLimit(dataUrl)
+    } catch {
+      /* 过大则原样导出 */
+    }
+    const b64 = dataUrlToBase64(limited)
+    if (!b64) continue
+    const p = zipImagePath(ref)
+    images[ref] = p
+    zip.file(p, b64, { base64: true })
+    if (i % 8 === 0) {
+      setExportProgress(`打包图片 ${calcPercent(i + 1, refs.length)}%`)
+      await yieldToUi(0)
+    }
+  }
+
+  const manifest = buildManifestPayload({
+    clothes,
+    matches: matchExport,
+    inspirations: inspirationExport,
+    wearLogs: wearLogsForExport(),
+    format: BUNDLE_FORMAT_ZIP
+  })
+  zip.file('manifest.json', JSON.stringify({ ...manifest, images }))
+
+  return {
+    zip,
+    clothes,
+    matchCount: matchExport.length,
+    inspirationCount: inspirationExport.length
+  }
+}
+
+async function exportZipAppLocal(zip, clothes, matchCount, inspirationCount) {
+  setExportProgress('生成 ZIP...')
+  const zipPayload = await zip.generateAsync({
+    type: 'base64',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  })
+  const b64 = sanitizeBase64ForAndroid(zipPayload)
+  if (!b64 || b64.length < 16) {
+    throw new Error('ZIP 生成为空')
+  }
+  const approxBytes = Math.floor((b64.length * 3) / 4)
+  console.warn('[Cloth导出] zip base64 字符', b64.length, '约', approxBytes, 'B')
+  setExportProgress('写入文件...')
+  const writeResult = await exportZipApp(EXPORT_ZIP_NAME, b64)
+  const displayPath = formatExportDisplayPath(writeResult, true)
+  const exportPath = finishExportForApp(displayPath)
+  try {
+    uni.setStorageSync('wardrobe_last_export_abs', exportPath)
+  } catch {
+    /* ignore */
+  }
+  const fileSizeKb = Math.max(1, Math.round((writeResult.size || 0) / 1024))
+  showExportSuccessModal(exportPath, fileSizeKb, '格式：ZIP（推荐，导入更快）')
+
+  return {
+    count: clothes.length,
+    matchCount,
+    inspirationCount,
+    filePath: exportPath,
+    fileSize: writeResult.size
+  }
+}
+
+async function exportZipH5(zip, clothes, matchCount, inspirationCount) {
+  setExportProgress('生成 ZIP...')
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = EXPORT_ZIP_NAME
+  a.click()
+  URL.revokeObjectURL(url)
+  return {
+    count: clothes.length,
+    matchCount,
+    inspirationCount,
+    filePath: EXPORT_ZIP_NAME,
+    fileSize: blob.size
+  }
+}
+
+export async function exportZip() {
+  uni.showLoading({ title: '打包中...', mask: true })
+  try {
+    const { zip, clothes, matchCount, inspirationCount } = await buildZipExportPayload()
+    // #ifdef H5
+    return await exportZipH5(zip, clothes, matchCount, inspirationCount)
+    // #endif
+
+    // #ifdef APP-PLUS
+    return await exportZipAppLocal(zip, clothes, matchCount, inspirationCount)
+    // #endif
+
+    throw new Error('当前平台暂不支持 ZIP 导出')
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+// #ifdef APP-PLUS
+function startAppZipImportPicker(runImport, reject) {
+  uni.showActionSheet({
+    itemList: ['从文件管理器选择 ZIP', '导入应用内 ZIP 备份'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        setTimeout(() => {
+          pickZipFileApp()
+            .then((buffer) => runImport(buffer))
+            .catch((err) => {
+              const msg = err && err.message ? String(err.message) : ''
+              if (msg === 'cancel' || (err && err.errMsg && String(err.errMsg).includes('cancel'))) {
+                reject(new Error('cancel'))
+                return
+              }
+              console.error('pickZipFileApp', err)
+              uni.showModal({
+                title: '选 ZIP 失败',
+                content: `${msg || '读取失败'}\n\n请确认选中 wardrobe_export.zip，或改用「导入应用内 ZIP 备份」。`,
+                showCancel: false
+              })
+              reject(err)
+            })
+        }, 280)
+      } else {
+        readAppLocalZipBackup(EXPORT_ZIP_NAME)
+          .then((buffer) => runImport(buffer))
+          .catch((err) => {
+            const msg = err && err.message ? String(err.message) : ''
+            if (msg === 'cancel') {
+              reject(new Error('cancel'))
+              return
+            }
+            console.error('readAppLocalZipBackup', err)
+            uni.showModal({
+              title: '读取 ZIP 失败',
+              content: `${msg || '未知错误'}\n\n请先在本机导出一次 ZIP。`,
+              showCancel: false
+            })
+            reject(err)
+          })
+      }
+    },
+    fail: () => reject(new Error('cancel'))
+  })
+}
+// #endif
+
+async function importZipFromBuffer(buffer) {
+  setImportProgress('解析 ZIP...')
+  const zip = await JSZip.loadAsync(buffer)
+  const manifestFile = zip.file('manifest.json')
+  if (!manifestFile) {
+    throw new Error('ZIP 缺少 manifest.json')
+  }
+  const manifestText = await manifestFile.async('text')
+  let manifest
+  try {
+    manifest = JSON.parse(manifestText)
+  } catch {
+    throw new Error('manifest.json 解析失败')
+  }
+  const bundle = normalizeZipManifest(manifest)
+  if (!bundle) {
+    throw new Error('ZIP 版本不支持（需要 v3）')
+  }
+
+  let clothes = normalizeImportClothes(bundle.clothes)
+  const matchList = normalizeImportMatches(bundle.matches)
+  let inspirationList = normalizeImportInspirations(bundle.inspirations)
+  if (!clothes.length && !matchList.length && !inspirationList.length) {
+    throw new Error('没有有效数据')
+  }
+
+  if (clothes.length) {
+    replaceAllClothes(clothes)
+  }
+  replaceAllMatches(matchList)
+
+  if (inspirationList.length) {
+    replaceAllInspirations(inspirationList)
+  } else if (bundle.inspirations && bundle.inspirations.length === 0) {
+    replaceAllInspirations([])
+  }
+
+  const refs = collectImageRefs(clothes, inspirationList)
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i]
+    const path = bundle.images[ref] || zipImagePath(ref)
+    const file = zip.file(path)
+    if (!file) continue
+    const b64 = await file.async('base64')
+    if (b64) {
+      await saveImage(ref, `data:image/jpeg;base64,${b64}`)
+    }
+    if (i % 8 === 0) {
+      setImportProgress(`还原图片 ${calcPercent(i + 1, refs.length)}%`)
+      await yieldToUi(0)
+    }
+  }
+
+  let wearLogCount = 0
+  if (Array.isArray(bundle.wearLogs)) {
+    setImportProgress('写入穿着记录...')
+    wearLogCount = replaceAllWearLogs(bundle.wearLogs).length
+  }
+
+  setImportProgress('刷新列表...')
+  const { hydrateClothesImages, hydrateInspirationsImages } = await import('./imageStore.js')
+  await hydrateClothesImages(getClothes())
+  await hydrateInspirationsImages(getInspirations())
+
+  const result = {
+    clothes: getClothes(),
+    matchCount: matchList.length,
+    inspirationCount: inspirationList.length,
+    wearLogCount
+  }
+  const parts = [
+    `衣服 ${result.clothes.length} 件`,
+    `搭配 ${matchList.length} 组`,
+    `灵感 ${inspirationList.length} 条`
+  ]
+  if (Array.isArray(bundle.wearLogs)) {
+    parts.push(`穿着记录 ${wearLogCount} 条`)
+  }
+  uni.showModal({
+    title: '导入成功',
+    content: `已写入：${parts.join('，')}`,
+    showCancel: false
+  })
+  return result
+}
+
+export async function importZip() {
+  const runImport = runZipImport
+
+  return new Promise((resolve, reject) => {
+    // #ifdef APP-PLUS
+    startAppZipImportPicker(
+      async (buffer) => {
+        try {
+          resolve(await runImport(buffer))
+        } catch (e) {
+          if (e && e.message !== 'cancel') {
+            console.error('importZip', e)
+            uni.showToast({ title: 'ZIP 导入失败', icon: 'none' })
+          }
+          reject(e)
+        }
+      },
+      reject
+    )
+    return
+    // #endif
+
+    ;(async () => {
+      try {
+        const buffer = await pickZipFileCrossPlatform()
+        resolve(await runImport(buffer))
+      } catch (e) {
+        if (e && e.message !== 'cancel') {
+          uni.showToast({ title: 'ZIP 导入失败', icon: 'none' })
+        }
+        reject(e)
+      }
+    })()
+  })
+}
+
+export async function exportData() {
+  return await exportZip()
+}
+
+export async function importData() {
+  return await importZip()
 }

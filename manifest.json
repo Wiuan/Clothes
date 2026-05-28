@@ -1,5 +1,5 @@
 {
-    "name" : "Cloth",
+    "name" : "clothes",
     "appid" : "__UNI__0DD86B0",
     "description" : "Cloth 电子衣柜",
     "versionName" : "2.0.0",
@@ -28,8 +28,9 @@
                 "requestLegacyExternalStorage" : true,
                 "permissions" : [
                     "<uses-permission android:name=\"android.permission.CAMERA\"/>",
-                    "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
-                    "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>"
+                    "<uses-permission android:name=\"android.permission.READ_MEDIA_IMAGES\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\"/>",
+                    "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\"/>"
                 ]
             },
             "splashscreen" : {

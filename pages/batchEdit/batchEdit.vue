@@ -1,74 +1,106 @@
 <template>
   <view class="page">
-    <view class="summary">
+    <view class="top-bar">
       <text class="count">已选 {{ ids.length }} 件</text>
-      <text class="hint">只修改你勾选的字段，未勾选的不变</text>
+      <text class="hint">只修改勾选字段，未勾选不变</text>
     </view>
 
-    <view class="form">
-      <view class="toggle-row">
-        <text class="toggle-label">修改季节</text>
-        <switch :checked="apply.season" @change="apply.season = $event.detail.value" />
-      </view>
-      <view v-if="apply.season" class="chips row">
-        <view
-          v-for="s in SEASONS"
-          :key="s"
-          class="chip"
-          :class="{ active: form.season === s }"
-          @tap="form.season = s"
-        >
-          {{ s }}
+    <view class="form-card">
+      <view class="field-block">
+        <view class="field-head">
+          <text class="field-label">季节</text>
+          <switch
+            class="field-switch"
+            :checked="apply.season"
+            color="#ff2442"
+            @change="apply.season = $event.detail.value"
+          />
+        </view>
+        <view v-if="apply.season" class="chips">
+          <view
+            v-for="s in SEASONS"
+            :key="s"
+            class="chip"
+            :class="{ active: form.season === s }"
+            @tap="form.season = s"
+          >
+            {{ s }}
+          </view>
         </view>
       </view>
 
-      <view class="toggle-row">
-        <text class="toggle-label">修改类型</text>
-        <switch :checked="apply.type" @change="apply.type = $event.detail.value" />
-      </view>
-      <view v-if="apply.type" class="chips row">
-        <view
-          v-for="t in TYPES"
-          :key="t"
-          class="chip"
-          :class="{ active: form.type === t }"
-          @tap="form.type = t"
-        >
-          {{ t }}
+      <view class="field-block">
+        <view class="field-head">
+          <text class="field-label">类型</text>
+          <switch
+            class="field-switch"
+            :checked="apply.type"
+            color="#ff2442"
+            @change="apply.type = $event.detail.value"
+          />
+        </view>
+        <view v-if="apply.type" class="chips">
+          <view
+            v-for="t in TYPES"
+            :key="t"
+            class="chip"
+            :class="{ active: form.type === t }"
+            @tap="form.type = t"
+          >
+            {{ t }}
+          </view>
         </view>
       </view>
 
-      <view class="toggle-row">
-        <text class="toggle-label">修改颜色</text>
-        <switch :checked="apply.color" @change="apply.color = $event.detail.value" />
-      </view>
-      <view v-if="apply.color" class="chips">
-        <view
-          v-for="c in PRESET_COLORS"
-          :key="c"
-          class="chip"
-          :class="{ active: isColorSelected(c) }"
-          @tap="onToggleColor(c)"
-        >
-          <view class="dot" :style="{ background: COLOR_HEX[c] }" />
-          <text>{{ c }}</text>
+      <view class="field-block">
+        <view class="field-head">
+          <text class="field-label">颜色</text>
+          <switch
+            class="field-switch"
+            :checked="apply.color"
+            color="#ff2442"
+            @change="apply.color = $event.detail.value"
+          />
         </view>
-      </view>
-      <text v-if="apply.color" class="sub-hint">可多选，将覆盖原颜色</text>
-      <view v-if="apply.color && form.otherSelected" class="custom">
-        <input v-model="form.colorCustom" class="input" placeholder="自定义颜色名" maxlength="10" />
+        <template v-if="apply.color">
+          <view class="chips">
+            <view
+              v-for="c in PRESET_COLORS"
+              :key="c"
+              class="chip"
+              :class="{ active: isColorSelected(c) }"
+              @tap="onToggleColor(c)"
+            >
+              <view class="dot" :style="{ background: COLOR_HEX[c] }" />
+              <text>{{ c }}</text>
+            </view>
+          </view>
+          <text class="sub-hint">可多选，将覆盖原颜色</text>
+          <view v-if="form.otherSelected" class="custom">
+            <input v-model="form.colorCustom" class="input" placeholder="自定义颜色名" maxlength="10" />
+          </view>
+        </template>
       </view>
 
-      <view class="toggle-row">
-        <text class="toggle-label">修改适宜温度</text>
-        <switch :checked="apply.temp" @change="apply.temp = $event.detail.value" />
+      <view class="field-block field-block-last">
+        <view class="field-head">
+          <text class="field-label">适宜温度</text>
+          <switch
+            class="field-switch"
+            :checked="apply.temp"
+            color="#ff2442"
+            @change="apply.temp = $event.detail.value"
+          />
+        </view>
+        <template v-if="apply.temp">
+          <view class="temp-row">
+            <input v-model="form.tempMin" class="input temp" type="number" placeholder="最低℃" />
+            <text class="sep">—</text>
+            <input v-model="form.tempMax" class="input temp" type="number" placeholder="最高℃" />
+          </view>
+          <text class="sub-hint">留空表示清除该温度值</text>
+        </template>
       </view>
-      <view v-if="apply.temp" class="temp-row">
-        <input v-model="form.tempMin" class="input temp" type="number" placeholder="最低℃" />
-        <text class="sep">—</text>
-        <input v-model="form.tempMax" class="input temp" type="number" placeholder="最高℃" />
-      </view>
-      <text v-if="apply.temp" class="sub-hint">留空表示清除该温度值</text>
     </view>
 
     <button class="save-btn" type="primary" @tap="onSave">应用修改</button>
@@ -191,103 +223,117 @@ function onSave() {
 .page {
   min-height: 100vh;
   background: #f7f7f8;
-  padding: 24rpx;
+  padding: 16rpx 16rpx 48rpx;
   box-sizing: border-box;
 }
 
-.summary {
+.top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8rpx 16rpx;
   background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: 12rpx;
+  padding: 14rpx 16rpx;
+  margin-bottom: 12rpx;
 }
 
 .count {
-  font-size: 32rpx;
+  font-size: 26rpx;
   font-weight: 600;
   color: #222;
-  display: block;
 }
 
 .hint {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999;
+  flex: 1;
+  min-width: 0;
 }
 
-.form {
+.form-card {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 8rpx 24rpx 24rpx;
+  border-radius: 12rpx;
+  padding: 4rpx 16rpx 12rpx;
 }
 
-.toggle-row {
+.field-block {
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.field-block-last {
+  border-bottom: none;
+}
+
+.field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 0 12rpx;
-  border-top: 1rpx solid #f0f0f0;
-
-  &:first-child {
-    border-top: none;
-  }
+  min-height: 48rpx;
 }
 
-.toggle-label {
-  font-size: 28rpx;
+.field-label {
+  font-size: 24rpx;
   font-weight: 600;
   color: #333;
+}
+
+.field-switch {
+  transform: scale(0.82);
+  transform-origin: center right;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx;
-  padding-bottom: 16rpx;
+  gap: 10rpx;
+  padding: 8rpx 0 4rpx;
 }
 
 .chip {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 10rpx 22rpx;
-  background: #f7f7f8;
+  gap: 6rpx;
+  padding: 6rpx 16rpx;
+  background: #fff;
+  border: 1rpx solid #eee;
   border-radius: 999rpx;
-  font-size: 26rpx;
+  font-size: 22rpx;
   color: #555;
-  border: 2rpx solid transparent;
 
   &.active {
-    background: #fff0f3;
-    border-color: #ff2442;
+    background: #fff5f6;
+    border-color: #ffcdd2;
     color: #ff2442;
   }
 }
 
 .dot {
-  width: 22rpx;
-  height: 22rpx;
+  width: 18rpx;
+  height: 18rpx;
   border-radius: 50%;
-  border: 1rpx solid rgba(0, 0, 0, 0.1);
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
 }
 
 .custom {
-  padding-bottom: 16rpx;
+  padding: 4rpx 0 8rpx;
 }
 
 .input {
-  font-size: 28rpx;
-  padding: 16rpx 20rpx;
-  background: #f7f7f8;
-  border-radius: 12rpx;
+  font-size: 24rpx;
+  padding: 10rpx 14rpx;
+  background: #fff;
+  border: 1rpx solid #eee;
+  border-radius: 8rpx;
+  box-sizing: border-box;
 }
 
 .temp-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  padding-bottom: 8rpx;
+  gap: 10rpx;
+  padding: 8rpx 0 4rpx;
 }
 
 .temp {
@@ -297,19 +343,23 @@ function onSave() {
 
 .sep {
   color: #999;
+  font-size: 22rpx;
 }
 
 .sub-hint {
   display: block;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #aaa;
-  padding-bottom: 16rpx;
+  line-height: 1.4;
+  padding-bottom: 4rpx;
 }
 
 .save-btn {
-  margin-top: 40rpx;
+  margin-top: 24rpx;
+  height: 72rpx;
+  line-height: 72rpx;
   background: #ff2442;
   border-radius: 999rpx;
-  font-size: 32rpx;
+  font-size: 28rpx;
 }
 </style>

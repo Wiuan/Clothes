@@ -12,4 +12,5 @@ alwaysApply: false
 - **录入/详情**：尺寸字段用 `getSizeFieldsForType`（`constants.js`）；颜色用 `PRESET_COLORS` + 自定义。
 - **导入导出按钮**：仅在 `pages/index/index.vue`（或明确要求的页）调用 `exportJson` / `importJson`，勿散落多处。
 - **样式**：`rpx` 单位；表单注意键盘遮挡（`adjust-position`、固定 `min-height` 防裁剪）。
+- **布局与视觉**：紧凑、筛选白底、一行收纳、弹窗白底等见 **`ui-layout.mdc`**。
 - **条件编译**：H5 与 `APP-PLUS` 行为分支用 `#ifdef`，与 `io.js` 导出逻辑保持一致。

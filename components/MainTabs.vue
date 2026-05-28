@@ -46,16 +46,16 @@ function switchTo(tab) {
 .main-tabs {
   display: flex;
   background: #fff;
-  padding: 12rpx 24rpx 0;
+  padding: 6rpx 16rpx 0;
   border-bottom: 1rpx solid #eee;
 }
 
 .tab {
   flex: 1;
   text-align: center;
-  font-size: 30rpx;
+  font-size: 28rpx;
   color: #888;
-  padding: 16rpx 0 20rpx;
+  padding: 10rpx 0 14rpx;
   position: relative;
 
   &.active {

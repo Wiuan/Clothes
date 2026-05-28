@@ -26,25 +26,30 @@
             <text class="chip-a">▾</text>
           </view>
         </picker>
-        <picker :range="sortLabels" :value="sortIdx" @change="onSortPick">
-          <view class="chip chip-sort" :class="{ active: !!sortMode }">
-            <text class="chip-v">{{ sortLabel }}</text>
-            <text class="chip-a">▾</text>
-          </view>
-        </picker>
       </view>
 
-      <view class="temp-row">
-        <text class="temp-label">当前温度</text>
-        <input
-          v-model="filterTemp"
-          class="temp-input"
-          type="number"
-          placeholder="℃ 选填"
-          @confirm="onTempConfirm"
+      <view class="sort-row">
+        <SortToggle
+          v-for="f in WARDROBE_SORT_FIELDS"
+          :key="f"
+          :label="SORT_FIELD_LABELS[f]"
+          :ascending="sortField === f ? sortAsc : defaultSortAsc(f)"
+          :selected="sortField === f"
+          @select="selectSort(f)"
+          @toggle-dir="toggleSortDir(f)"
         />
-        <text v-if="filterTemp !== ''" class="temp-hint">适合 {{ displayList.length }} 件</text>
-        <text class="reset" @tap="resetFilter">重置</text>
+        <view class="sort-row-tail">
+          <text class="temp-label">温度</text>
+          <input
+            v-model="filterTemp"
+            class="temp-input"
+            type="number"
+            placeholder="℃"
+            @confirm="onTempConfirm"
+          />
+          <text v-if="filterTemp !== ''" class="temp-hint">适合{{ displayList.length }}件</text>
+          <text class="reset" @tap="resetFilter">重置</text>
+        </view>
       </view>
     </view>
 
@@ -64,7 +69,7 @@
     </view>
 
     <!-- 三列紧凑网格 -->
-    <view v-if="displayList.length" class="grid">
+    <view v-if="displayList.length" class="grid" :key="gridLayoutKey">
       <ClothCard
         v-for="item in displayList"
         :key="item.id"
@@ -107,33 +112,34 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import MainTabs from '../../components/MainTabs.vue'
 import ClothCard from '../../components/ClothCard.vue'
+import SortToggle from '../../components/SortToggle.vue'
 import { getClothes, batchRemoveClothes } from '../../utils/storage.js'
 import { removeClothFromMatches } from '../../utils/matchStorage.js'
 import { filterClothes } from '../../utils/filter.js'
-import { sortClothes, SORT_OPTIONS } from '../../utils/sortClothes.js'
+import { sortClothes, SORT_FIELD_LABELS, WARDROBE_SORT_FIELDS } from '../../utils/sortClothes.js'
 import { PRESET_COLORS, SEASONS, TYPES } from '../../utils/constants.js'
-import { exportJson, importJson } from '../../utils/io.js'
+import { exportData, importData } from '../../utils/io.js'
 import { setBatchEditIds, consumeBatchEditDone } from '../../utils/batch.js'
 import { hydrateClothesImages } from '../../utils/imageStore.js'
 import { getImageLoadTick } from '../../utils/imageCache.js'
 import { getWornClothIdSetForDate } from '../../utils/checkinStorage.js'
+import { setClothBrowseIds } from '../../utils/browseOrder.js'
 
 const ALL = '全部'
 const seasonOpts = [ALL, ...SEASONS]
 const typeOpts = [ALL, ...TYPES]
 const colorOpts = [ALL, ...PRESET_COLORS]
-const sortLabels = SORT_OPTIONS.map((o) => o.label)
-
 const list = ref([])
 const filterSeason = ref('')
 const filterType = ref('')
 const filterColor = ref('')
 const filterTemp = ref('')
-const sortMode = ref('')
+const sortField = ref('created')
+const sortAsc = ref(false)
 const batchMode = ref(false)
 const selectedIds = ref([])
 const todayWornTick = ref(0)
@@ -146,16 +152,9 @@ const todayWornSet = computed(() => {
 const seasonIdx = computed(() => (filterSeason.value ? seasonOpts.indexOf(filterSeason.value) : 0))
 const typeIdx = computed(() => (filterType.value ? typeOpts.indexOf(filterType.value) : 0))
 const colorIdx = computed(() => (filterColor.value ? colorOpts.indexOf(filterColor.value) : 0))
-const sortIdx = computed(() => {
-  const i = SORT_OPTIONS.findIndex((o) => o.value === sortMode.value)
-  return i >= 0 ? i : 0
-})
-
 const seasonLabel = computed(() => filterSeason.value || ALL)
 const typeLabel = computed(() => filterType.value || ALL)
 const colorLabel = computed(() => filterColor.value || ALL)
-const sortLabel = computed(() => SORT_OPTIONS[sortIdx.value]?.label || '默认')
-
 const displayList = computed(() => {
   const filtered = filterClothes(list.value, {
     season: filterSeason.value,
@@ -163,8 +162,14 @@ const displayList = computed(() => {
     color: filterColor.value,
     currentTemp: filterTemp.value
   })
-  return sortClothes(filtered, sortMode.value)
+  return sortClothes(filtered, sortField.value, sortAsc.value)
 })
+
+const gridLayoutKey = computed(() =>
+  [sortField.value, sortAsc.value, filterSeason.value, filterType.value, filterColor.value, filterTemp.value].join(
+    '|'
+  )
+)
 
 const selectedSet = computed(() => new Set(selectedIds.value))
 
@@ -210,9 +215,36 @@ function onTypePick(e) {
 function onColorPick(e) {
   filterColor.value = pickVal(colorOpts, e.detail.value)
 }
-function onSortPick(e) {
-  const idx = Number(e.detail.value)
-  sortMode.value = SORT_OPTIONS[idx]?.value ?? ''
+function scrollListTop() {
+  nextTick(() => {
+    setTimeout(() => {
+      uni.pageScrollTo({ scrollTop: 0, duration: 0 })
+    }, 32)
+  })
+}
+
+watch(
+  () => [sortField.value, sortAsc.value, filterSeason.value, filterType.value, filterColor.value, filterTemp.value],
+  scrollListTop
+)
+
+function defaultSortAsc(field) {
+  return field !== 'created'
+}
+
+function selectSort(field) {
+  if (sortField.value === field) return
+  sortField.value = field
+  sortAsc.value = defaultSortAsc(field)
+}
+
+function toggleSortDir(field) {
+  if (sortField.value !== field) {
+    sortField.value = field
+    sortAsc.value = defaultSortAsc(field)
+    return
+  }
+  sortAsc.value = !sortAsc.value
 }
 
 function onTempConfirm() {
@@ -224,7 +256,8 @@ function resetFilter() {
   filterType.value = ''
   filterColor.value = ''
   filterTemp.value = ''
-  sortMode.value = ''
+  sortField.value = 'created'
+  sortAsc.value = false
 }
 
 function toggleBatchMode() {
@@ -240,6 +273,7 @@ function onCardClick(item) {
     selectedIds.value = [...set]
     return
   }
+  setClothBrowseIds(displayList.value.map((c) => c.id))
   uni.navigateTo({ url: `/pages/detail/detail?id=${item.id}` })
 }
 
@@ -294,12 +328,16 @@ function goAdd() {
 
 async function onExport() {
   try {
-    const result = await exportJson()
+    const result = await exportData()
     // #ifdef H5
-    uni.showToast({ title: '已下载 JSON', icon: 'success' })
+    uni.showModal({
+      title: '导出成功',
+      content: `文件已下载：\n${result?.filePath || 'wardrobe_export.zip'}`,
+      showCancel: false
+    })
     // #endif
     // #ifdef APP-PLUS
-    // 成功提示已在 exportJson 内弹窗
+    // 成功提示已在导出实现内弹窗
     void result
     // #endif
     // #ifndef H5
@@ -310,31 +348,23 @@ async function onExport() {
   } catch (e) {
     if (e && e.message !== 'empty') {
       const msg = e && e.message ? String(e.message) : ''
-      uni.showToast({
-        title: msg && msg.length <= 18 ? msg : '导出失败，请查看控制台',
-        icon: 'none',
-        duration: 2800
-      })
       console.error('onExport', e)
+      uni.showModal({
+        title: '导出失败',
+        content: msg || '请查看控制台日志',
+        showCancel: false
+      })
     }
   }
 }
 
 async function onImport() {
   try {
-    const result = await importJson()
+    const result = await importData()
     list.value = result.clothes || result
     await hydrateClothesImages(list.value)
     imgTick.value = getImageLoadTick()
-    const mc = result.matchCount || 0
-    const ic = result.inspirationCount || 0
-    const parts = [`${list.value.length} 件`]
-    if (mc) parts.push(`${mc} 套搭配`)
-    if (ic) parts.push(`${ic} 条灵感`)
-    uni.showToast({
-      title: `已导入 ${parts.join('、')}`,
-      icon: 'success'
-    })
+    /* 导入条数已在 utils/io.js 弹窗中展示（衣物+搭配+灵感+穿着记录） */
   } catch {
     /* 已提示 */
   }
@@ -350,7 +380,7 @@ async function onImport() {
 
 .filter-panel {
   background: #fff;
-  padding: 16rpx 20rpx 12rpx;
+  padding: 10rpx 16rpx 8rpx;
   position: sticky;
   top: 0;
   z-index: 9;
@@ -363,16 +393,37 @@ async function onImport() {
   gap: 8rpx;
 }
 
+.sort-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 8rpx;
+}
+
+.sort-row-tail {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx;
+  margin-left: auto;
+  flex: 1;
+  min-width: 200rpx;
+  justify-content: flex-end;
+}
+
 .chip {
   display: flex;
   align-items: center;
   gap: 4rpx;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #333;
-  padding: 8rpx 12rpx;
-  background: #f7f7f8;
+  padding: 6rpx 10rpx;
+  background: #fff;
   border-radius: 999rpx;
-  border: 2rpx solid transparent;
+  border: 1rpx solid #eee;
   flex: 1;
   min-width: 0;
   justify-content: center;
@@ -380,15 +431,6 @@ async function onImport() {
   &.active {
     background: #fff5f6;
     border-color: #ffcdd2;
-  }
-}
-
-.chip-sort {
-  flex: 0 0 auto;
-  padding: 8rpx 14rpx;
-
-  .chip-v {
-    max-width: 64rpx;
   }
 }
 
@@ -416,36 +458,31 @@ async function onImport() {
   color: #bbb;
 }
 
-.temp-row {
-  display: flex;
-  align-items: center;
-  margin-top: 12rpx;
-  gap: 12rpx;
-}
-
 .temp-label {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #666;
   flex-shrink: 0;
 }
 
 .temp-input {
-  width: 120rpx;
-  font-size: 24rpx;
-  padding: 8rpx 16rpx;
-  background: #f7f7f8;
+  width: 88rpx;
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
+  background: #fff;
+  border: 1rpx solid #eee;
   border-radius: 8rpx;
   text-align: center;
+  box-sizing: border-box;
 }
 
 .temp-hint {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #ff2442;
-  flex: 1;
+  flex-shrink: 0;
 }
 
-.reset {
-  font-size: 24rpx;
+.sort-row-tail .reset {
+  font-size: 22rpx;
   color: #ff2442;
   flex-shrink: 0;
 }
@@ -454,7 +491,7 @@ async function onImport() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  padding: 12rpx 20rpx;
+  padding: 8rpx 16rpx;
   font-size: 22rpx;
   color: #666;
   row-gap: 8rpx;
