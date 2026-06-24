@@ -58,6 +58,20 @@ object JsonHelpers {
             put("accent", JSONArray(accent))
         }.toString()
 
+    /** 从导出 JSON 对象读取 colorTags 字符串（兼容对象或字符串字段） */
+    fun resolveColorTagsJson(o: JSONObject): String {
+        val empty = """{"primary":[],"secondary":[],"accent":[]}"""
+        if (!o.has("colorTags")) {
+            val legacy = o.optString("colorTagsJson", "").trim()
+            return if (legacy.startsWith("{")) legacy else empty
+        }
+        return when (val v = o.opt("colorTags")) {
+            is JSONObject -> v.toString()
+            is String -> v.trim().takeIf { it.startsWith("{") } ?: empty
+            else -> empty
+        }
+    }
+
     fun linksToJson(linkMap: Map<String, String>): String {
         val arr = JSONArray()
         linkMap.forEach { (clothId, relation) ->

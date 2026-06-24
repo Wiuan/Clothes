@@ -5,6 +5,7 @@ import com.cloth.wardrobe.data.InspirationEntity
 import com.cloth.wardrobe.data.JsonHelpers
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 
 data class InspirationColorTags(
     val primary: List<String>,
@@ -25,13 +26,58 @@ data class ColorRecommendResult(
 
 fun parseColorTags(json: String): InspirationColorTags {
     return try {
-        val o = JSONObject(json.ifBlank { """{"primary":[],"secondary":[],"accent":[]}""" })
-        fun tags(key: String) = JsonHelpers.jsonToStringListFromArray(o.optJSONArray(key))
-        InspirationColorTags(tags("primary"), tags("secondary"), tags("accent"))
+        val trimmed = json.trim().ifBlank { """{"primary":[],"secondary":[],"accent":[]}""" }
+        val o = when {
+            trimmed.startsWith("{") -> JSONObject(trimmed)
+            trimmed.startsWith("\"") -> JSONObject(JSONTokener(trimmed))
+            else -> return InspirationColorTags(emptyList(), emptyList(), emptyList())
+        }
+        InspirationColorTags(
+            colorTagList(o, "primary"),
+            colorTagList(o, "secondary"),
+            colorTagList(o, "accent")
+        )
     } catch (_: Exception) {
         InspirationColorTags(emptyList(), emptyList(), emptyList())
     }
 }
+
+private fun colorTagList(o: JSONObject, key: String): List<String> {
+    o.optJSONArray(key)?.let { arr ->
+        return JsonHelpers.jsonToStringListFromArray(arr)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+    val single = o.optString(key, "").trim()
+    if (single.isNotBlank()) {
+        return JsonHelpers.jsonToStringList(single)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+    return emptyList()
+}
+
+private fun normalizeColorName(name: String): String {
+    val t = name.trim()
+    if (t.isBlank() || t == "其他") return t
+    return if (t.endsWith("色") && t.length > 1) t.dropLast(1) else t
+}
+
+private fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
+    if (a.isEmpty() || b.isEmpty()) return false
+    val set = b.map { normalizeColorName(it) }.filter { it.isNotBlank() && it != "其他" }.toSet()
+    if (set.isEmpty()) return false
+    return a.any {
+        val n = normalizeColorName(it)
+        n.isNotBlank() && n != "其他" && set.contains(n)
+    }
+}
+
+private fun inspirationMatchColors(tags: InspirationColorTags): List<String> =
+    (tags.primary + tags.secondary + tags.accent)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && it != "其他" }
+        .distinct()
 
 fun parseLinks(json: String): List<InspirationLink> {
     return try {
@@ -51,15 +97,6 @@ fun parseLinks(json: String): List<InspirationLink> {
 fun isInspirationLinkedToCloth(insp: InspirationEntity, clothId: String): Boolean =
     parseLinks(insp.linksJson).any { it.clothId == clothId }
 
-private fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
-    if (a.isEmpty() || b.isEmpty()) return false
-    val set = b.toSet()
-    return a.any { set.contains(it) }
-}
-
-private fun seasonsMatch(clothSeason: String, inspSeason: String): Boolean =
-    inspSeason.isBlank() || clothSeason == inspSeason
-
 /** 未关联灵感：同季（含未填季节）优先，其它季节在后 */
 private fun unlinkedInspirationSeasonRank(clothSeason: String, inspSeason: String): Int =
     when {
@@ -73,15 +110,15 @@ fun buildColorRecommendations(
     inspirations: List<InspirationEntity>,
     allClothes: List<ClothEntity>
 ): ColorRecommendResult {
-    val clothColors = parseItemColors(cloth.colorsJson)
+    val clothColors = clothColorsForRecommend(cloth)
     val linked = inspirations.filter { isInspirationLinkedToCloth(it, cloth.id) }
         .sortedByDescending { it.createdAt }
     val linkedIds = linked.map { it.id }.toSet()
     val unlinkedMatched = inspirations.filter { insp ->
         if (linkedIds.contains(insp.id)) return@filter false
-        val primary = parseColorTags(insp.colorTagsJson).primary
-        if (primary.isEmpty()) return@filter false
-        colorsOverlap(clothColors, primary)
+        val matchColors = inspirationMatchColors(parseColorTags(insp.colorTagsJson))
+        if (matchColors.isEmpty()) return@filter false
+        colorsOverlap(clothColors, matchColors)
     }.sortedWith(
         compareBy<InspirationEntity> { unlinkedInspirationSeasonRank(cloth.season, it.season) }
             .thenByDescending { it.createdAt }
@@ -94,27 +131,30 @@ fun buildColorRecommendations(
         tags.accent.forEach { palette.add(it) }
     }
     if (palette.isEmpty()) {
-        val clothSet = clothColors.toSet()
+        val clothSet = clothColors.map { normalizeColorName(it) }.toSet()
         matched.forEach { insp ->
-            parseColorTags(insp.colorTagsJson).primary
-                .filter { !clothSet.contains(it) }
+            inspirationMatchColors(parseColorTags(insp.colorTagsJson))
+                .map { normalizeColorName(it) }
+                .filter { it.isNotBlank() && it != "其他" && !clothSet.contains(it) }
                 .forEach { palette.add(it) }
         }
     }
     val paletteList = palette.toList()
+    val companionPalette = paletteList.ifEmpty {
+        if (matched.isEmpty()) clothColors else emptyList()
+    }
     val companions = allClothes.filter { c ->
         c.id != cloth.id && c.status != "discarded" && c.season == cloth.season &&
-            colorsOverlap(parseItemColors(c.colorsJson), paletteList)
-    }.sortedWith { a, b ->
-        val ra = companionTypeRank(cloth.type, a.type)
-        val rb = companionTypeRank(cloth.type, b.type)
-        if (ra != rb) ra.compareTo(rb) else (b.createdAt - a.createdAt).toInt()
-    }
+            colorsOverlap(clothColorsForRecommend(c), companionPalette)
+    }.sortedWith(
+        compareBy<ClothEntity> { companionTypeRank(cloth.type, it.type) }
+            .thenByDescending { it.createdAt }
+    )
     return ColorRecommendResult(
         ready = clothColors.isNotEmpty() || linked.isNotEmpty(),
         matchedInspirations = matched,
         companions = companions,
-        palette = paletteList,
+        palette = if (paletteList.isNotEmpty()) paletteList else companionPalette,
         matchedTotal = matched.size,
         companionTotal = companions.size
     )

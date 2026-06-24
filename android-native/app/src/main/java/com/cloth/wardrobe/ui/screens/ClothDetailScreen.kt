@@ -3,7 +3,6 @@ package com.cloth.wardrobe.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +17,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Size
 import com.cloth.wardrobe.data.ClothEntity
 import com.cloth.wardrobe.data.ImageStore
 import com.cloth.wardrobe.data.InspirationEntity
@@ -65,8 +67,12 @@ import com.cloth.wardrobe.ui.components.DetailActionBar
 import com.cloth.wardrobe.ui.components.DetailActionStyle
 import com.cloth.wardrobe.ui.components.DetailSwipeHost
 import com.cloth.wardrobe.ui.isInspirationLinkedToCloth
+import com.cloth.wardrobe.ui.hasClothColorsForRecommend
 import com.cloth.wardrobe.ui.parseItemColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ClothDetailScreen(
@@ -105,12 +111,13 @@ fun ClothDetailScreen(
             )
         }
         else -> {
-            DetailSwipeHost(ids, clothId, "衣服详情", onBack) { id, padding ->
+            DetailSwipeHost(ids, clothId, "衣服详情", onBack) { id, padding, isActive ->
                 ClothDetailPageContent(
                     repository, id, onBack, onEdit, onWearStats,
                     onInspirationClick, onClothClick,
                     showTopBar = false,
-                    outerPadding = padding
+                    outerPadding = padding,
+                    isActive = isActive
                 )
             }
         }
@@ -128,7 +135,8 @@ private fun ClothDetailPageContent(
     onInspirationClick: (String) -> Unit,
     onClothClick: (String) -> Unit,
     showTopBar: Boolean,
-    outerPadding: PaddingValues = PaddingValues()
+    outerPadding: PaddingValues = PaddingValues(),
+    isActive: Boolean = true
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -136,17 +144,32 @@ private fun ClothDetailPageContent(
     var wearLogs by remember { mutableStateOf(emptyList<com.cloth.wardrobe.data.WearLogEntity>()) }
     var colorRec by remember { mutableStateOf<ColorRecommendResult?>(null) }
 
-    LaunchedEffect(clothId) {
+    LaunchedEffect(clothId, isActive) {
+        if (!isActive) return@LaunchedEffect
         cloth = null
         colorRec = null
-        val item = repository.getCloth(clothId) ?: return@LaunchedEffect
-        cloth = item
-        wearLogs = repository.listWearLogs()
-        colorRec = buildColorRecommendations(
-            item,
-            repository.listInspirations(),
-            repository.listClothes()
-        )
+        try {
+            val item = repository.getCloth(clothId) ?: return@LaunchedEffect
+            cloth = item
+            wearLogs = repository.listWearLogs()
+            val inspirations = repository.listInspirations()
+            val allClothes = repository.listClothes()
+            colorRec = withContext(Dispatchers.Default) {
+                buildColorRecommendations(item, inspirations, allClothes)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            val item = cloth
+            colorRec = ColorRecommendResult(
+                ready = item != null && hasClothColorsForRecommend(item),
+                matchedInspirations = emptyList(),
+                companions = emptyList(),
+                palette = emptyList(),
+                matchedTotal = 0,
+                companionTotal = 0
+            )
+        }
     }
 
     val pageBody: @Composable (PaddingValues) -> Unit = pageBody@ { padding ->
@@ -188,7 +211,11 @@ private fun ClothDetailPageContent(
         ) {
             if (img.isFile) {
                 AsyncImage(
-                    ImageRequest.Builder(context).data(img).build(),
+                    ImageRequest.Builder(context)
+                        .data(img)
+                        .size(Size(1080, 1920))
+                        .crossfade(true)
+                        .build(),
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.FillWidth
@@ -347,18 +374,18 @@ private fun ClothDetailPageContent(
                             RecSubtitle("相关灵感")
                             if (rec.matchedInspirations.isEmpty()) {
                                 Text(
-                                    "暂无匹配灵感，请为灵感填写主色标签",
+                                    "暂无匹配灵感，请为灵感填写主色/辅色/点缀颜色标签",
                                     fontSize = 12.sp,
                                     color = WardrobeConstants.TextHint
                                 )
                             } else {
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
+                                LazyRow(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    rec.matchedInspirations.forEach { insp ->
+                                    items(
+                                        items = rec.matchedInspirations,
+                                        key = { it.id }
+                                    ) { insp ->
                                         InspirationRecCard(
                                             insp,
                                             context,
@@ -381,6 +408,8 @@ private fun ClothDetailPageContent(
                                 Text(
                                     if (rec.matchedInspirations.isNotEmpty()) {
                                         "相关灵感暂无辅色/点缀，或衣柜里还没有同搭配色的${item.season}单品"
+                                    } else if (rec.palette.isNotEmpty()) {
+                                        "衣柜里暂无其他${item.season}同色系单品可搭配"
                                     } else {
                                         "暂无同色系单品"
                                     },
@@ -395,13 +424,13 @@ private fun ClothDetailPageContent(
                                     color = WardrobeConstants.TextMuted,
                                     modifier = Modifier.padding(bottom = 4.dp)
                                 )
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
+                                LazyRow(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    rec.companions.forEach { c ->
+                                    items(
+                                        items = rec.companions,
+                                        key = { it.id }
+                                    ) { c ->
                                         CompanionRecCard(c, context) {
                                             if (c.id != clothId) onClothClick(c.id)
                                         }
@@ -626,7 +655,11 @@ private fun InspirationRecCard(
                 val img = ImageStore.fileForRef(context, insp.imageRef)
                 if (img.isFile) {
                     AsyncImage(
-                        ImageRequest.Builder(context).data(img).crossfade(true).build(),
+                        ImageRequest.Builder(context)
+                            .data(img)
+                            .size(Size(176, 176))
+                            .crossfade(true)
+                            .build(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -682,7 +715,11 @@ private fun CompanionRecCard(
                 val img = ImageStore.fileForRef(context, cloth.imageRef)
                 if (img.isFile) {
                     AsyncImage(
-                        ImageRequest.Builder(context).data(img).crossfade(true).build(),
+                        ImageRequest.Builder(context)
+                            .data(img)
+                            .size(Size(176, 176))
+                            .crossfade(true)
+                            .build(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

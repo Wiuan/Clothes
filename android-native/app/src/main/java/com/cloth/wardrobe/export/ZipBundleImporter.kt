@@ -105,9 +105,27 @@ object ZipBundleImporter {
     private fun parseCloth(o: JSONObject): ClothEntity? {
         val id = o.optString("id", "")
         if (id.isBlank()) return null
-        val colorsJson = JsonHelpers.stringListToJson(
-            JsonHelpers.jsonToStringListFromArray(o.optJSONArray("colors"))
-        )
+        val colorsJson = when {
+            o.has("colors") -> {
+                val fromArray = JsonHelpers.jsonToStringListFromArray(o.optJSONArray("colors"))
+                if (fromArray.isNotEmpty()) {
+                    JsonHelpers.stringListToJson(fromArray)
+                } else {
+                    val legacy = o.optString("colorsJson", o.optString("color", ""))
+                    if (legacy.isNotBlank()) {
+                        if (legacy.startsWith("[")) legacy
+                        else JsonHelpers.stringListToJson(JsonHelpers.jsonToStringList(legacy))
+                    } else {
+                        JsonHelpers.stringListToJson(listOf("其他"))
+                    }
+                }
+            }
+            else -> {
+                val legacy = o.optString("colorsJson", o.optString("color", "其他"))
+                if (legacy.startsWith("[")) legacy
+                else JsonHelpers.stringListToJson(JsonHelpers.jsonToStringList(legacy))
+            }
+        }
         return ClothEntity(
             id = id,
             name = o.optString("name", "未命名"),
@@ -154,8 +172,7 @@ object ZipBundleImporter {
             season = o.optString("season", ""),
             style = o.optString("style", ""),
             occasion = o.optString("occasion", ""),
-            colorTagsJson = o.optJSONObject("colorTags")?.toString()
-                ?: """{"primary":[],"secondary":[],"accent":[]}""",
+            colorTagsJson = JsonHelpers.resolveColorTagsJson(o),
             linksJson = o.optJSONArray("links")?.toString() ?: "[]",
             createdAt = o.optLong("createdAt", System.currentTimeMillis())
         )

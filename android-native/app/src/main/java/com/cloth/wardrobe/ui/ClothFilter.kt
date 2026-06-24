@@ -6,6 +6,28 @@ import com.cloth.wardrobe.data.JsonHelpers
 fun parseItemColors(colorsJson: String): List<String> =
     JsonHelpers.jsonToStringList(colorsJson).ifEmpty { listOf("其他") }
 
+/** 搭配匹配用：不含自动补的「其他」，并兼容 colorHexMap 里的自定义色名 */
+fun clothColorsForRecommend(item: ClothEntity): List<String> {
+    val parsed = JsonHelpers.jsonToStringList(item.colorsJson)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && it != "其他" }
+    if (parsed.isNotEmpty()) return parsed.distinct()
+    try {
+        val hex = org.json.JSONObject(item.colorHexMapJson.ifBlank { "{}" })
+        val keys = hex.keys().asSequence()
+            .map { it.toString().trim() }
+            .filter { it.isNotBlank() && it != "其他" }
+            .toList()
+        if (keys.isNotEmpty()) return keys.distinct()
+    } catch (_: Exception) {
+        /* ignore */
+    }
+    return emptyList()
+}
+
+fun hasClothColorsForRecommend(item: ClothEntity): Boolean =
+    clothColorsForRecommend(item).isNotEmpty()
+
 fun itemMatchesColor(item: ClothEntity, filterColor: String): Boolean {
     if (filterColor.isEmpty()) return true
     val list = parseItemColors(item.colorsJson)

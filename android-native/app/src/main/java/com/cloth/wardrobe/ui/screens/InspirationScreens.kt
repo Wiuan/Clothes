@@ -450,11 +450,12 @@ fun InspirationDetailScreen(
     val swipeIds = browseIds
     if (!isEdit && !inspirationId.isNullOrBlank() && swipeIds != null && swipeIds.size > 1) {
         var deleteTarget by remember { mutableStateOf<String?>(null) }
-        DetailSwipeHost(swipeIds, inspirationId!!, "灵感详情", onDone) { id, pad ->
+        DetailSwipeHost(swipeIds, inspirationId!!, "灵感详情", onDone) { id, pad, isActive ->
             InspirationDetailViewPage(
                 repository = repository,
                 inspirationId = id,
                 padding = pad,
+                isActive = isActive,
                 onClothClick = onClothClick,
                 onEdit = onEdit,
                 onDelete = { deleteTarget = id }
@@ -726,6 +727,7 @@ private fun InspirationDetailViewPage(
     repository: WardrobeRepository,
     inspirationId: String,
     padding: PaddingValues,
+    isActive: Boolean = true,
     onClothClick: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -743,7 +745,8 @@ private fun InspirationDetailViewPage(
     var accentColors by remember { mutableStateOf(listOf<String>()) }
     var linkedClothes by remember { mutableStateOf(emptyList<Pair<ClothEntity, String>>()) }
 
-    LaunchedEffect(inspirationId) {
+    LaunchedEffect(inspirationId, isActive) {
+        if (!isActive) return@LaunchedEffect
         loaded = false
         repository.getInspiration(inspirationId)?.let { item ->
             name = item.name
@@ -793,7 +796,11 @@ private fun InspirationDetailViewPage(
         ) {
             when {
                 imageRef.isNotBlank() && ImageStore.fileForRef(context, imageRef).isFile -> AsyncImage(
-                    ImageRequest.Builder(context).data(ImageStore.fileForRef(context, imageRef)).build(),
+                    ImageRequest.Builder(context)
+                        .data(ImageStore.fileForRef(context, imageRef))
+                        .size(coil.size.Size(1080, 1920))
+                        .crossfade(true)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.FillWidth

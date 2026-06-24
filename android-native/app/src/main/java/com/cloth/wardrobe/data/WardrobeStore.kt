@@ -58,9 +58,26 @@ class WardrobeStore(context: Context) {
         val id = o.optString("id", "")
         if (id.isBlank()) return null
         val colors = when {
-            o.has("colors") -> JsonHelpers.stringListToJson(
-                JsonHelpers.jsonToStringListFromArray(o.optJSONArray("colors"))
-            )
+            o.has("colors") -> {
+                val fromArray = JsonHelpers.jsonToStringListFromArray(o.optJSONArray("colors"))
+                if (fromArray.isNotEmpty()) {
+                    JsonHelpers.stringListToJson(fromArray)
+                } else {
+                    val legacy = o.optString("colorsJson", o.optString("color", ""))
+                    when {
+                        legacy.isBlank() -> {
+                            val hex = o.optJSONObject("colorHexMap")
+                            val keys = if (hex != null) {
+                                hex.keys().asSequence().map { it.toString() }.filter { it.isNotBlank() }.toList()
+                            } else emptyList()
+                            if (keys.isNotEmpty()) JsonHelpers.stringListToJson(keys)
+                            else JsonHelpers.stringListToJson(listOf("其他"))
+                        }
+                        legacy.startsWith("[") -> legacy
+                        else -> JsonHelpers.stringListToJson(JsonHelpers.jsonToStringList(legacy))
+                    }
+                }
+            }
             else -> {
                 val legacy = o.optString("colorsJson", o.optString("color", "其他"))
                 if (legacy.startsWith("[")) legacy
@@ -128,11 +145,7 @@ class WardrobeStore(context: Context) {
         return readArray(inspirationsFile).mapNotNull { o ->
             val id = o.optString("id", "")
             if (id.isBlank()) return@mapNotNull null
-            val colorTags = when {
-                o.has("colorTags") -> o.optJSONObject("colorTags")?.toString()
-                    ?: """{"primary":[],"secondary":[],"accent":[]}"""
-                else -> o.optString("colorTagsJson", """{"primary":[],"secondary":[],"accent":[]}""")
-            }
+            val colorTags = JsonHelpers.resolveColorTagsJson(o)
             val links = when {
                 o.has("links") -> o.optJSONArray("links")?.toString() ?: "[]"
                 else -> o.optString("linksJson", "[]")

@@ -1,6 +1,7 @@
 package com.cloth.wardrobe.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,7 +19,7 @@ fun DetailSwipeHost(
     initialId: String,
     titleBase: String,
     onBack: () -> Unit,
-    page: @Composable (id: String, padding: PaddingValues) -> Unit
+    page: @Composable (id: String, padding: PaddingValues, isActive: Boolean) -> Unit
 ) {
     val initialPage = orderedIds.indexOf(initialId).coerceAtLeast(0)
     val pagerState = rememberPagerState(
@@ -42,7 +43,13 @@ fun DetailSwipeHost(
                 .fillMaxSize()
                 .padding(scaffoldPadding)
         ) { pageIndex ->
-            page(orderedIds[pageIndex], PaddingValues())
+            val isActive = pageIndex == pagerState.currentPage ||
+                (pagerState.isScrollInProgress && pageIndex == pagerState.targetPage)
+            if (isActive) {
+                page(orderedIds[pageIndex], PaddingValues(), true)
+            } else {
+                Box(Modifier.fillMaxSize())
+            }
         }
     }
 }
