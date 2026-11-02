@@ -88,10 +88,10 @@ private fun parseGarmentLength(item: ClothEntity): Int? {
 }
 
 private fun byCreatedDesc(a: ClothEntity, b: ClothEntity): Int =
-    (b.createdAt - a.createdAt).toInt()
+    b.createdAt.compareTo(a.createdAt)
 
 private fun byCreatedAsc(a: ClothEntity, b: ClothEntity): Int =
-    (a.createdAt - b.createdAt).toInt()
+    a.createdAt.compareTo(b.createdAt)
 
 fun nextWardrobeSortField(current: String): Pair<String, Boolean> = when (current) {
     "created" -> "length" to true
@@ -127,13 +127,7 @@ fun sortClothes(
         "color" -> {
             val arr = list.toMutableList()
             arr.sortWith { a, b ->
-                val ka = colorSortKey(a)
-                val kb = colorSortKey(b)
-                var cmp = when {
-                    ka.first != kb.first -> ka.first.compareTo(kb.first)
-                    ka.first == 0 -> ka.second.compareTo(kb.second)
-                    else -> ka.third.compareTo(kb.third)
-                }
+                var cmp = compareColorSortKeys(colorSortKey(a), colorSortKey(b))
                 if (cmp == 0) cmp = if (ascending) byCreatedAsc(a, b) else byCreatedDesc(a, b)
                 if (ascending) cmp else -cmp
             }
@@ -144,10 +138,16 @@ fun sortClothes(
     }
 }
 
-private fun colorSortKey(item: ClothEntity): Triple<Int, Int, String> {
+fun colorSortKey(item: ClothEntity): Triple<Int, Int, String> {
     val name = parseItemColors(item.colorsJson).firstOrNull() ?: "其他"
     val idx = WardrobeConstants.PRESET_COLORS.indexOf(name)
     return if (idx >= 0) Triple(0, idx, name) else Triple(1, 0, name)
+}
+
+/** 比较两个颜色排序键；返回值仅用 compareTo，避免 Long→Int 溢出 */
+fun compareColorSortKeys(ka: Triple<Int, Int, String>, kb: Triple<Int, Int, String>): Int {
+    if (ka.first != kb.first) return ka.first.compareTo(kb.first)
+    return if (ka.first == 0) ka.second.compareTo(kb.second) else ka.third.compareTo(kb.third)
 }
 
 fun colorLabel(item: ClothEntity): String =

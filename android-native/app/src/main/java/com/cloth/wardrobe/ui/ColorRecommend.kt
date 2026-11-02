@@ -57,10 +57,23 @@ private fun colorTagList(o: JSONObject, key: String): List<String> {
     return emptyList()
 }
 
-private fun normalizeColorName(name: String): String {
+fun normalizeColorName(name: String): String {
     val t = name.trim()
     if (t.isBlank() || t == "其他") return t
     return if (t.endsWith("色") && t.length > 1) t.dropLast(1) else t
+}
+
+fun clothMatchesColorName(item: ClothEntity, color: String): Boolean {
+    val target = normalizeColorName(color)
+    if (target.isBlank() || target == "其他") return false
+    return clothColorsForRecommend(item).any { normalizeColorName(it) == target }
+}
+
+fun inspirationMatchesColorName(item: InspirationEntity, color: String): Boolean {
+    val target = normalizeColorName(color)
+    if (target.isBlank() || target == "其他") return false
+    return inspirationMatchColors(parseColorTags(item.colorTagsJson))
+        .any { normalizeColorName(it) == target }
 }
 
 private fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
@@ -112,27 +125,23 @@ fun buildColorRecommendations(
 ): ColorRecommendResult {
     val clothColors = clothColorsForRecommend(cloth)
     val linked = inspirations.filter { isInspirationLinkedToCloth(it, cloth.id) }
-        .sortedByDescending { it.createdAt }
     val linkedIds = linked.map { it.id }.toSet()
     val unlinkedMatched = inspirations.filter { insp ->
         if (linkedIds.contains(insp.id)) return@filter false
         val matchColors = inspirationMatchColors(parseColorTags(insp.colorTagsJson))
         if (matchColors.isEmpty()) return@filter false
         colorsOverlap(clothColors, matchColors)
-    }.sortedWith(
-        compareBy<InspirationEntity> { unlinkedInspirationSeasonRank(cloth.season, it.season) }
-            .thenByDescending { it.createdAt }
-    )
-    val matched = linked + unlinkedMatched
+    }
+    val matchedRaw = linked + unlinkedMatched
     val palette = mutableSetOf<String>()
-    matched.forEach { insp ->
+    matchedRaw.forEach { insp ->
         val tags = parseColorTags(insp.colorTagsJson)
         tags.secondary.forEach { palette.add(it) }
         tags.accent.forEach { palette.add(it) }
     }
     if (palette.isEmpty()) {
         val clothSet = clothColors.map { normalizeColorName(it) }.toSet()
-        matched.forEach { insp ->
+        matchedRaw.forEach { insp ->
             inspirationMatchColors(parseColorTags(insp.colorTagsJson))
                 .map { normalizeColorName(it) }
                 .filter { it.isNotBlank() && it != "其他" && !clothSet.contains(it) }
@@ -141,20 +150,41 @@ fun buildColorRecommendations(
     }
     val paletteList = palette.toList()
     val companionPalette = paletteList.ifEmpty {
-        if (matched.isEmpty()) clothColors else emptyList()
+        if (matchedRaw.isEmpty()) clothColors else emptyList()
+    }
+    val displayPalette = if (paletteList.isNotEmpty()) paletteList else companionPalette
+    // 按搭配色分组；同色内：已关联优先 → 同季优先 → 新→旧
+    val matched = matchedRaw.sortedWith { a, b ->
+        val ra = inspirationPaletteRank(a, displayPalette)
+        val rb = inspirationPaletteRank(b, displayPalette)
+        if (ra != rb) return@sortedWith ra.compareTo(rb)
+        val la = if (linkedIds.contains(a.id)) 0 else 1
+        val lb = if (linkedIds.contains(b.id)) 0 else 1
+        if (la != lb) return@sortedWith la.compareTo(lb)
+        val sa = unlinkedInspirationSeasonRank(cloth.season, a.season)
+        val sb = unlinkedInspirationSeasonRank(cloth.season, b.season)
+        if (sa != sb) return@sortedWith sa.compareTo(sb)
+        b.createdAt.compareTo(a.createdAt)
     }
     val companions = allClothes.filter { c ->
         c.id != cloth.id && c.status != "discarded" && c.season == cloth.season &&
             colorsOverlap(clothColorsForRecommend(c), companionPalette)
-    }.sortedWith(
-        compareBy<ClothEntity> { companionTypeRank(cloth.type, it.type) }
-            .thenByDescending { it.createdAt }
-    )
+    }.sortedWith { a, b ->
+        // 按搭配色顺序分组，便于点击搭配色后横向定位
+        val ra = companionPaletteRank(a, displayPalette)
+        val rb = companionPaletteRank(b, displayPalette)
+        if (ra != rb) return@sortedWith ra.compareTo(rb)
+        val colorCmp = compareColorSortKeys(colorSortKey(a), colorSortKey(b))
+        if (colorCmp != 0) return@sortedWith colorCmp
+        val typeCmp = companionTypeRank(cloth.type, a.type).compareTo(companionTypeRank(cloth.type, b.type))
+        if (typeCmp != 0) return@sortedWith typeCmp
+        b.createdAt.compareTo(a.createdAt)
+    }
     return ColorRecommendResult(
         ready = clothColors.isNotEmpty() || linked.isNotEmpty(),
         matchedInspirations = matched,
         companions = companions,
-        palette = if (paletteList.isNotEmpty()) paletteList else companionPalette,
+        palette = displayPalette,
         matchedTotal = matched.size,
         companionTotal = companions.size
     )
@@ -178,6 +208,30 @@ private fun companionTypeRank(currentType: String, candidateType: String): Int {
             else -> 2
         }
     }
+}
+
+/** 单品在搭配色列表中的分组序号（首个命中色） */
+private fun companionPaletteRank(item: ClothEntity, palette: List<String>): Int {
+    if (palette.isEmpty()) return 0
+    val colors = clothColorsForRecommend(item).map { normalizeColorName(it) }.toSet()
+    palette.forEachIndexed { index, color ->
+        val n = normalizeColorName(color)
+        if (n.isNotBlank() && colors.contains(n)) return index
+    }
+    return palette.size
+}
+
+/** 灵感在搭配色列表中的分组序号（主色/辅色/点缀任一命中） */
+private fun inspirationPaletteRank(item: InspirationEntity, palette: List<String>): Int {
+    if (palette.isEmpty()) return 0
+    val colors = inspirationMatchColors(parseColorTags(item.colorTagsJson))
+        .map { normalizeColorName(it) }
+        .toSet()
+    palette.forEachIndexed { index, color ->
+        val n = normalizeColorName(color)
+        if (n.isNotBlank() && colors.contains(n)) return index
+    }
+    return palette.size
 }
 
 fun filterInspirations(
@@ -211,10 +265,10 @@ private fun inspirationColorSortKey(item: InspirationEntity): Triple<Int, Int, S
 }
 
 private fun byInspCreatedDesc(a: InspirationEntity, b: InspirationEntity): Int =
-    (b.createdAt - a.createdAt).toInt()
+    b.createdAt.compareTo(a.createdAt)
 
 private fun byInspCreatedAsc(a: InspirationEntity, b: InspirationEntity): Int =
-    (a.createdAt - b.createdAt).toInt()
+    a.createdAt.compareTo(b.createdAt)
 
 fun nextInspirationSortField(current: String): Pair<String, Boolean> = when (current) {
     "created" -> "color" to true

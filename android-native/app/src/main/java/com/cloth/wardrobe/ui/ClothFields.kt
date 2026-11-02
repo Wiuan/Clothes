@@ -53,6 +53,15 @@ object ClothFields {
         return base + extra
     }
 
+    /**
+     * 切换类型时保留新类型也有的尺寸（如 长款→上衣 的衣长/胸围/肩宽/袖长），
+     * 丢掉仅旧类型才有的键。
+     */
+    fun retainSizesForType(sizes: Map<String, String>, newType: String): Map<String, String> {
+        val allowed = getSizeFieldsForType(newType).map { it.key }.toSet()
+        return sizes.filter { (k, v) -> k in allowed && v.isNotBlank() }
+    }
+
     fun typeHasMaterial(type: String): Boolean {
         val t = migrateType(type)
         return t == "上衣" || t == "下装"

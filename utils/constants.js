@@ -86,6 +86,21 @@ export function getSizeFieldsForType(type) {
   return TOP_SIZE_FIELDS
 }
 
+/**
+ * 切换类型时保留新类型也有的尺寸（如 长款→上衣 的衣长/胸围/肩宽/袖长）
+ * @param {Record<string, string>} sizes
+ * @param {string} newType
+ */
+export function retainSizesForType(sizes, newType) {
+  const allowed = new Set(getSizeFieldsForType(newType).map((f) => f.key))
+  const next = {}
+  if (!sizes || typeof sizes !== 'object') return next
+  for (const [k, v] of Object.entries(sizes)) {
+    if (allowed.has(k) && v != null && String(v).trim() !== '') next[k] = v
+  }
+  return next
+}
+
 /** 上衣、下装可填材质 */
 export function typeHasMaterial(type) {
   const t = migrateType(type)

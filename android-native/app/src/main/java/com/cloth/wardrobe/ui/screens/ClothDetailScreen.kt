@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -60,7 +62,10 @@ import com.cloth.wardrobe.ui.DetailRow
 import com.cloth.wardrobe.ui.BrowseOrderHolder
 import com.cloth.wardrobe.ui.WardrobeConstants
 import com.cloth.wardrobe.ui.buildColorRecommendations
+import com.cloth.wardrobe.ui.clothMatchesColorName
+import com.cloth.wardrobe.ui.colorHex
 import com.cloth.wardrobe.ui.colorHexFor
+import com.cloth.wardrobe.ui.inspirationMatchesColorName
 import com.cloth.wardrobe.ui.components.AppTopBar
 import com.cloth.wardrobe.ui.components.DetailAction
 import com.cloth.wardrobe.ui.components.DetailActionBar
@@ -143,6 +148,19 @@ private fun ClothDetailPageContent(
     var cloth by remember(clothId) { mutableStateOf<ClothEntity?>(null) }
     var wearLogs by remember { mutableStateOf(emptyList<com.cloth.wardrobe.data.WearLogEntity>()) }
     var colorRec by remember { mutableStateOf<ColorRecommendResult?>(null) }
+    val companionListState = rememberLazyListState()
+    val inspirationListState = rememberLazyListState()
+    var selectedPaletteColor by remember(clothId) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(clothId) {
+        selectedPaletteColor = null
+        if (companionListState.layoutInfo.totalItemsCount > 0) {
+            companionListState.scrollToItem(0)
+        }
+        if (inspirationListState.layoutInfo.totalItemsCount > 0) {
+            inspirationListState.scrollToItem(0)
+        }
+    }
 
     LaunchedEffect(clothId, isActive) {
         if (!isActive) return@LaunchedEffect
@@ -365,12 +383,100 @@ private fun ClothDetailPageContent(
                         }
                         else -> {
                             Text(
-                                "已关联灵感优先；其余主色相近的灵感按本件季节优先排序，左右滑动查看全部",
+                                "点搭配色：灵感按该色筛选（再点取消）；单品滚到对应颜色",
                                 fontSize = 11.sp,
                                 color = WardrobeConstants.TextMuted,
                                 lineHeight = 15.sp,
                                 modifier = Modifier.padding(bottom = 6.dp)
                             )
+                            val filteredInspirations = remember(rec.matchedInspirations, selectedPaletteColor) {
+                                val color = selectedPaletteColor
+                                if (color.isNullOrBlank()) rec.matchedInspirations
+                                else rec.matchedInspirations.filter {
+                                    inspirationMatchesColorName(it, color)
+                                }
+                            }
+                            if (rec.palette.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        "搭配色：",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF666666)
+                                    )
+                                    rec.palette.forEach { colorName ->
+                                        val selected = selectedPaletteColor == colorName
+                                        val hasInsp = rec.matchedInspirations.any {
+                                            inspirationMatchesColorName(it, colorName)
+                                        }
+                                        val hasCloth = rec.companions.any {
+                                            clothMatchesColorName(it, colorName)
+                                        }
+                                        val hasMatch = hasInsp || hasCloth
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(
+                                                    if (selected) Color(0xFFFFF5F6) else Color.White
+                                                )
+                                                .border(
+                                                    0.5.dp,
+                                                    if (selected) Color(0xFFFFCDD2) else Color(0xFFE8E8E8),
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable(enabled = hasMatch) {
+                                                    val clearing = selectedPaletteColor == colorName
+                                                    selectedPaletteColor = if (clearing) null else colorName
+                                                    scope.launch {
+                                                        if (!clearing) {
+                                                            inspirationListState.scrollToItem(0)
+                                                            val clothIdx = rec.companions.indexOfFirst {
+                                                                clothMatchesColorName(it, colorName)
+                                                            }
+                                                            if (clothIdx >= 0) {
+                                                                companionListState.animateScrollToItem(clothIdx)
+                                                            }
+                                                        } else if (
+                                                            inspirationListState.layoutInfo.totalItemsCount > 0
+                                                        ) {
+                                                            inspirationListState.animateScrollToItem(0)
+                                                        }
+                                                    }
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Box(
+                                                Modifier
+                                                    .size(8.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(colorHex(colorName))
+                                                    .border(
+                                                        0.5.dp,
+                                                        Color.Black.copy(alpha = 0.08f),
+                                                        RoundedCornerShape(4.dp)
+                                                    )
+                                            )
+                                            Text(
+                                                colorName,
+                                                fontSize = 11.sp,
+                                                color = if (hasMatch) {
+                                                    WardrobeConstants.TextSecondary
+                                                } else {
+                                                    WardrobeConstants.TextHint
+                                                },
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             RecSubtitle("相关灵感")
                             if (rec.matchedInspirations.isEmpty()) {
                                 Text(
@@ -378,12 +484,29 @@ private fun ClothDetailPageContent(
                                     fontSize = 12.sp,
                                     color = WardrobeConstants.TextHint
                                 )
+                            } else if (filteredInspirations.isEmpty()) {
+                                Text(
+                                    "当前搭配色下暂无灵感，再点该色可取消筛选",
+                                    fontSize = 12.sp,
+                                    color = WardrobeConstants.TextHint
+                                )
                             } else {
+                                Text(
+                                    if (selectedPaletteColor != null) {
+                                        "显示含「${selectedPaletteColor}」 ${filteredInspirations.size}/${rec.matchedInspirations.size} 条，再点取消"
+                                    } else {
+                                        "共 ${rec.matchedInspirations.size} 条，点搭配色可筛选"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = WardrobeConstants.TextMuted,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
                                 LazyRow(
+                                    state = inspirationListState,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     items(
-                                        items = rec.matchedInspirations,
+                                        items = filteredInspirations,
                                         key = { it.id }
                                     ) { insp ->
                                         InspirationRecCard(
@@ -396,14 +519,6 @@ private fun ClothDetailPageContent(
                                 }
                             }
                             RecSubtitle("可搭配单品", topGap = true)
-                            if (rec.palette.isNotEmpty()) {
-                                Text(
-                                    "搭配色：${rec.palette.joinToString(" · ")}",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF666666),
-                                    modifier = Modifier.padding(bottom = 6.dp)
-                                )
-                            }
                             if (rec.companions.isEmpty()) {
                                 Text(
                                     if (rec.matchedInspirations.isNotEmpty()) {
@@ -419,12 +534,13 @@ private fun ClothDetailPageContent(
                                 )
                             } else {
                                 Text(
-                                    "共 ${rec.companions.size} 件，左右滑动查看",
+                                    "共 ${rec.companions.size} 件，按颜色排列，点搭配色可定位",
                                     fontSize = 11.sp,
                                     color = WardrobeConstants.TextMuted,
                                     modifier = Modifier.padding(bottom = 4.dp)
                                 )
                                 LazyRow(
+                                    state = companionListState,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     items(

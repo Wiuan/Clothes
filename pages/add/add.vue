@@ -181,6 +181,7 @@ import {
   COLOR_HEX,
   CLOTH_STATUS,
   getSizeFieldsForType,
+  retainSizesForType,
   typeHasMaterial
 } from '../../utils/constants.js'
 import { getClothById, addCloth, updateCloth } from '../../utils/storage.js'
@@ -273,13 +274,10 @@ function onToggleColor(c) {
 }
 
 function onTypeChange(type) {
-  const prev = form.value.type
+  if (form.value.type === type) return
   form.value.type = type
-  if (!isEdit.value || prev !== type) {
-    if (!isEdit.value || originalType.value !== type) {
-      form.value.sizes = {}
-    }
-  }
+  // 共用尺寸字段直接保留（长款↔上衣 的衣长/胸围等）
+  form.value.sizes = retainSizesForType(form.value.sizes, type)
 }
 
 function pickImageFrom(sourceType) {

@@ -256,14 +256,11 @@ fun ClothEditScreen(
                     ) {
                         WardrobeConstants.TYPES.forEach { t ->
                             ChipText(t, type == t) {
-                                val prev = type
+                                if (type == t) return@ChipText
                                 type = t
-                                if (!isEdit || prev != t) {
-                                    if (!isEdit || originalType != t) {
-                                        sizes = emptyMap()
-                                        sizesLoadTick++
-                                    }
-                                }
+                                // 共用尺寸字段直接保留（长款↔上衣 的衣长/胸围等）
+                                sizes = ClothFields.retainSizesForType(sizes, t)
+                                sizesLoadTick++
                             }
                         }
                     }
