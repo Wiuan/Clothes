@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloth.wardrobe.data.ClothEntity
+import com.cloth.wardrobe.data.InspirationEntity
+import com.cloth.wardrobe.data.TodayRecommendPrefs
 import com.cloth.wardrobe.data.WardrobeRepository
 import com.cloth.wardrobe.data.WardrobeUiPrefs
 import com.cloth.wardrobe.export.ExportResult
@@ -56,11 +58,14 @@ import com.cloth.wardrobe.ui.components.AppAlertDialog
 import com.cloth.wardrobe.ui.components.ClothGridCard
 import com.cloth.wardrobe.ui.components.FilterChipDropdown
 import com.cloth.wardrobe.ui.components.MainTab
+import com.cloth.wardrobe.ui.components.TodayRecommendDialog
 import com.cloth.wardrobe.ui.components.WardrobeEmptyState
 import com.cloth.wardrobe.ui.components.WardrobeFab
 import com.cloth.wardrobe.ui.components.WardrobePageHeader
 import com.cloth.wardrobe.ui.components.SortToggleChip
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,11 +84,18 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val uiPrefs = remember { WardrobeUiPrefs(context) }
+    val todayPrefs = remember { TodayRecommendPrefs(context) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var clothes by remember { mutableStateOf<List<ClothEntity>>(emptyList()) }
+    var inspirations by remember { mutableStateOf<List<InspirationEntity>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
+
+    var showTodayRecommend by remember { mutableStateOf(false) }
+    var todaySeason by remember { mutableStateOf(inferSeasonFromDate()) }
+    var todayResult by remember { mutableStateOf<TodayRecommendResult?>(null) }
+    var todayLoading by remember { mutableStateOf(false) }
 
     var filterSeason by remember { mutableStateOf("") }
     var filterType by remember { mutableStateOf("") }
@@ -127,6 +139,7 @@ fun MainScreen(
             try {
                 repository.seedDemoIfEmpty()
                 clothes = repository.listClothes()
+                inspirations = repository.listInspirations()
             } finally {
                 loading = false
             }
@@ -134,6 +147,41 @@ fun MainScreen(
     }
 
     LaunchedEffect(refreshKey) { refresh() }
+
+    fun resolveTodayRecommend(season: String, forceReroll: Boolean) {
+        scope.launch {
+            todayLoading = true
+            try {
+                val date = todayRecommendDateStr()
+                val allClothes = if (clothes.isNotEmpty()) clothes else repository.listClothes()
+                val allInsp = if (inspirations.isNotEmpty()) inspirations else repository.listInspirations()
+                if (clothes.isEmpty()) clothes = allClothes
+                if (inspirations.isEmpty()) inspirations = allInsp
+                val cached = if (!forceReroll) todayPrefs.loadFor(date, season) else null
+                val next = if (cached != null) {
+                    TodayRecommendResult.fromCache(cached)
+                } else {
+                    withContext(Dispatchers.Default) {
+                        buildTodayRecommend(
+                            season = season,
+                            clothes = allClothes,
+                            inspirations = allInsp,
+                            exclude = if (forceReroll) todayResult else null
+                        )
+                    }.also { todayPrefs.save(date, season, it.toCache(date)) }
+                }
+                todayResult = next
+            } finally {
+                todayLoading = false
+            }
+        }
+    }
+
+    fun openTodayRecommend() {
+        todaySeason = inferSeasonFromDate()
+        showTodayRecommend = true
+        resolveTodayRecommend(todaySeason, forceReroll = false)
+    }
 
     val displayList = remember(clothes, filterSeason, filterType, filterColor, filterTemp, sortField, sortAsc) {
         sortClothes(
@@ -187,6 +235,7 @@ fun MainScreen(
                     title = "我的衣柜",
                     currentTab = MainTab.Wardrobe,
                     compact = true,
+                    onTodayRecommend = { openTodayRecommend() },
                     onTabClick = { tab ->
                         when (tab) {
                             MainTab.Wardrobe -> Unit
@@ -356,6 +405,37 @@ fun MainScreen(
             text = "文件已保存至：\n${result.path}\n\n大小：约 $sizeKb KB\n\n格式：ZIP（推荐，导入更快）",
             confirmText = "知道了",
             onConfirm = { exportSuccess = null }
+        )
+    }
+
+    val clothesById = remember(clothes) { clothes.associateBy { it.id } }
+    if (showTodayRecommend) {
+        TodayRecommendDialog(
+            result = todayResult,
+            season = todaySeason,
+            clothesById = clothesById,
+            loading = todayLoading,
+            onDismiss = { showTodayRecommend = false },
+            onSeasonChange = { s ->
+                if (todaySeason == s) return@TodayRecommendDialog
+                todaySeason = s
+                resolveTodayRecommend(s, forceReroll = false)
+            },
+            onReroll = { resolveTodayRecommend(todaySeason, forceReroll = true) },
+            onWearToday = {
+                val ids = todayResult?.wearClothIds.orEmpty()
+                if (ids.isEmpty()) return@TodayRecommendDialog
+                scope.launch {
+                    repository.addWearLog(ids)
+                    snackbar.showSnackbar("已记为今日穿着")
+                    showTodayRecommend = false
+                }
+            },
+            onClothClick = { id ->
+                showTodayRecommend = false
+                BrowseOrderHolder.clothIds = displayList.map { it.id }
+                onClothClick(id)
+            }
         )
     }
 }

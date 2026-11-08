@@ -76,7 +76,7 @@ fun inspirationMatchesColorName(item: InspirationEntity, color: String): Boolean
         .any { normalizeColorName(it) == target }
 }
 
-private fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
+fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
     if (a.isEmpty() || b.isEmpty()) return false
     val set = b.map { normalizeColorName(it) }.filter { it.isNotBlank() && it != "其他" }.toSet()
     if (set.isEmpty()) return false
@@ -86,11 +86,14 @@ private fun colorsOverlap(a: List<String>, b: List<String>): Boolean {
     }
 }
 
-private fun inspirationMatchColors(tags: InspirationColorTags): List<String> =
+fun inspirationMatchColors(tags: InspirationColorTags): List<String> =
     (tags.primary + tags.secondary + tags.accent)
         .map { it.trim() }
         .filter { it.isNotBlank() && it != "其他" }
         .distinct()
+
+fun inspirationPaletteColors(item: InspirationEntity): List<String> =
+    inspirationMatchColors(parseColorTags(item.colorTagsJson))
 
 fun parseLinks(json: String): List<InspirationLink> {
     return try {
