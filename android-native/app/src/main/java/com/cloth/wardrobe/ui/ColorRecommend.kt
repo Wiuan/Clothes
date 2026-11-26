@@ -174,17 +174,17 @@ fun buildColorRecommendations(
             WardrobeConstants.seasonsCompatible(cloth.season, c.season) &&
             colorsOverlap(clothColorsForRecommend(c), companionPalette)
     }.sortedWith { a, b ->
-        // 搭配色优先分组（点色连续）；同色内同季优先于邻季
+        // 搭配色优先；同色内：类型成套优先 → 同季优先邻季 → 新→旧
         val ra = companionPaletteRank(a, displayPalette)
         val rb = companionPaletteRank(b, displayPalette)
         if (ra != rb) return@sortedWith ra.compareTo(rb)
         val colorCmp = compareColorSortKeys(colorSortKey(a), colorSortKey(b))
         if (colorCmp != 0) return@sortedWith colorCmp
+        val typeCmp = companionTypeRank(cloth.type, a.type).compareTo(companionTypeRank(cloth.type, b.type))
+        if (typeCmp != 0) return@sortedWith typeCmp
         val sa = WardrobeConstants.seasonMatchRank(cloth.season, a.season)
         val sb = WardrobeConstants.seasonMatchRank(cloth.season, b.season)
         if (sa != sb) return@sortedWith sa.compareTo(sb)
-        val typeCmp = companionTypeRank(cloth.type, a.type).compareTo(companionTypeRank(cloth.type, b.type))
-        if (typeCmp != 0) return@sortedWith typeCmp
         b.createdAt.compareTo(a.createdAt)
     }
     return ColorRecommendResult(
@@ -197,22 +197,37 @@ fun buildColorRecommendations(
     )
 }
 
+/**
+ * 同色内类型优先级（越小越靠前）
+ * 上衣：下装 → 上衣 → 长款 → 运动
+ * 下装：上衣 → 长款 → 下装 → 运动
+ * 长款：下装 → 上衣 → 长款 → 运动
+ */
 private fun companionTypeRank(currentType: String, candidateType: String): Int {
     return when (currentType) {
         "上衣" -> when (candidateType) {
             "下装" -> 0
             "上衣" -> 1
-            else -> 2
+            "长款" -> 2
+            else -> 3
         }
         "下装" -> when (candidateType) {
             "上衣" -> 0
-            "下装" -> 1
-            else -> 2
+            "长款" -> 1
+            "下装" -> 2
+            else -> 3
+        }
+        "长款" -> when (candidateType) {
+            "下装" -> 0
+            "上衣" -> 1
+            "长款" -> 2
+            else -> 3
         }
         else -> when (candidateType) {
-            "上衣" -> 0
-            "下装" -> 1
-            else -> 2
+            "下装" -> 0
+            "上衣" -> 1
+            "长款" -> 2
+            else -> 3
         }
     }
 }

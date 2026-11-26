@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.0",
-  "notes": "冬↔春秋叠穿；可搭配点色筛选+邻季角标；GitHub 检查更新",
-  "apkUrl": "https://github.com/Wiuan/Clothes/releases/download/v1.1.0/clothes-1.1.0.apk"
+  "versionCode": 3,
+  "versionName": "1.1.1",
+  "notes": "可搭配同色内按类型成套排序（上衣优先下装；长款优先下装等）",
+  "apkUrl": "https://github.com/Wiuan/Clothes/releases/download/v1.1.1/clothes-1.1.1.apk"
 }
