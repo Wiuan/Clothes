@@ -537,7 +537,7 @@ private fun ClothDetailPageContent(
                                     if (selectedPaletteColor != null) {
                                         "显示含「${selectedPaletteColor}」 ${filteredCompanions.size}/${rec.companions.size} 件（含邻季），再点取消"
                                     } else {
-                                        "共 ${rec.companions.size} 件，按颜色排；点搭配色可筛选（冬↔春秋）"
+                                        "共 ${rec.companions.size} 件，成套类型优先；点搭配色可筛选（冬↔春秋）"
                                     },
                                     fontSize = 11.sp,
                                     color = WardrobeConstants.TextMuted,

@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "1.1.1",
-  "notes": "可搭配同色内按类型成套排序（上衣优先下装；长款优先下装等）",
-  "apkUrl": "https://github.com/Wiuan/Clothes/releases/download/v1.1.1/clothes-1.1.1.apk"
+  "versionCode": 4,
+  "versionName": "1.1.2",
+  "notes": "可搭配改为类型成套优先（上衣先下装，避免多色上衣插队）",
+  "apkUrl": "https://github.com/Wiuan/Clothes/releases/download/v1.1.2/clothes-1.1.2.apk"
 }
