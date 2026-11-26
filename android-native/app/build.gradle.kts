@@ -19,9 +19,20 @@ android {
         }
     }
 
+    // 与现网安装包一致：用本机 debug.keystore 签 release，否则 assembleRelease 产出未签名包无法覆盖安装
+    signingConfigs {
+        create("debugKey") {
+            val debugStore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storeFile = debugStore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debugKey")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
