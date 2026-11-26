@@ -70,13 +70,16 @@ fun buildTodayRecommend(
     random: Random = Random.Default,
     exclude: TodayRecommendResult? = null
 ): TodayRecommendResult {
-    val active = clothes.filter { it.status != "discarded" && it.season == season }
+    // 冬/春秋含邻季（叠穿）；同季优先抽取
+    val active = clothes.filter {
+        it.status != "discarded" && WardrobeConstants.seasonsCompatible(season, it.season)
+    }
     val tops = active.filter { it.type == "上衣" }
     val bottoms = active.filter { it.type == "下装" }
     val longs = active.filter { it.type == "长款" }
 
     val inspCandidates = inspirations.filter { insp ->
-        (insp.season.isBlank() || insp.season == season) &&
+        (insp.season.isBlank() || WardrobeConstants.seasonsCompatible(season, insp.season)) &&
             inspirationPaletteColors(insp).isNotEmpty()
     }.shuffled(random)
 
@@ -91,7 +94,11 @@ fun buildTodayRecommend(
         } else emptyList()
         val base = if (colored.isNotEmpty()) colored else pool
         val without = base.filter { excludeId == null || it.id != excludeId }
-        return (without.ifEmpty { base }).randomOrNull(random)
+        val candidates = without.ifEmpty { base }
+        // 同季优先，再随机
+        val same = candidates.filter { it.season == season }
+        val poolPick = same.ifEmpty { candidates }
+        return poolPick.randomOrNull(random)
     }
 
     fun inspLabel(insp: InspirationEntity?): String {

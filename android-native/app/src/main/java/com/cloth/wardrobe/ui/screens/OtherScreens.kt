@@ -101,7 +101,14 @@ fun CheckinScreen(
     LaunchedEffect(Unit) { reload() }
 
     val filteredClothes = remember(allClothes, filterSeason, filterType) {
-        filterClothes(allClothes, filterSeason, filterType, "")
+        // 今日穿着：冬/春秋筛选带邻季，叠穿不用来回切季节
+        filterClothes(
+            allClothes,
+            filterSeason,
+            filterType,
+            "",
+            includeAdjacentSeasons = true
+        )
     }
     val clothMap = remember(allClothes) { allClothes.associateBy { it.id } }
     val canSubmit = if (mode == "single") selected.isNotEmpty() else selectedMatch != null

@@ -1,5 +1,5 @@
 import { getItemColors } from './color.js'
-import { TYPE_TOP, TYPE_BOTTOM } from './constants.js'
+import { TYPE_TOP, TYPE_BOTTOM, seasonsCompatible, seasonMatchRank } from './constants.js'
 
 /** 灵感未填季节 → 视为可匹配，便于你发现后去改 */
 export function seasonsMatch(clothSeason, inspSeason) {
@@ -114,6 +114,9 @@ export function companionTypeRank(currentType, candidateType) {
 
 export function sortCompanionClothes(cloth, companions) {
   return [...(companions || [])].sort((a, b) => {
+    const sa = seasonMatchRank(cloth?.season, a.season)
+    const sb = seasonMatchRank(cloth?.season, b.season)
+    if (sa !== sb) return sa - sb
     const ra = companionTypeRank(cloth?.type, a.type)
     const rb = companionTypeRank(cloth?.type, b.type)
     if (ra !== rb) return ra - rb
@@ -121,13 +124,13 @@ export function sortCompanionClothes(cloth, companions) {
   })
 }
 
-/** 同季节、颜色命中搭配色 palette 的其它衣柜单品（已按类型优先排序） */
+/** 同季或邻季（冬↔春秋）、颜色命中搭配色 palette 的其它衣柜单品 */
 export function getCompanionClothes(cloth, allClothes, palette) {
   if (!cloth || !palette?.length) return []
   const list = (allClothes || []).filter((c) => {
     if (c.id === cloth.id) return false
     if (c.status === 'discarded') return false
-    if (c.season !== cloth.season) return false
+    if (!seasonsCompatible(cloth.season, c.season)) return false
     return colorsOverlap(getItemColors(c), palette)
   })
   return sortCompanionClothes(cloth, list)

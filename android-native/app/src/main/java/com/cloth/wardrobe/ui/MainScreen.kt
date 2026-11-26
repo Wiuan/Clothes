@@ -53,6 +53,9 @@ import com.cloth.wardrobe.data.InspirationEntity
 import com.cloth.wardrobe.data.TodayRecommendPrefs
 import com.cloth.wardrobe.data.WardrobeRepository
 import com.cloth.wardrobe.data.WardrobeUiPrefs
+import com.cloth.wardrobe.data.update.AppUpdateRepository
+import com.cloth.wardrobe.data.update.RemoteAppVersion
+import com.cloth.wardrobe.data.update.UpdateCheckResult
 import com.cloth.wardrobe.export.ExportResult
 import com.cloth.wardrobe.ui.components.AppAlertDialog
 import com.cloth.wardrobe.ui.components.ClothGridCard
@@ -63,6 +66,7 @@ import com.cloth.wardrobe.ui.components.WardrobeEmptyState
 import com.cloth.wardrobe.ui.components.WardrobeFab
 import com.cloth.wardrobe.ui.components.WardrobePageHeader
 import com.cloth.wardrobe.ui.components.SortToggleChip
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,6 +89,7 @@ fun MainScreen(
     val context = LocalContext.current
     val uiPrefs = remember { WardrobeUiPrefs(context) }
     val todayPrefs = remember { TodayRecommendPrefs(context) }
+    val updateRepo = remember { AppUpdateRepository(context) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var clothes by remember { mutableStateOf<List<ClothEntity>>(emptyList()) }
@@ -96,6 +101,83 @@ fun MainScreen(
     var todaySeason by remember { mutableStateOf(inferSeasonFromDate()) }
     var todayResult by remember { mutableStateOf<TodayRecommendResult?>(null) }
     var todayLoading by remember { mutableStateOf(false) }
+
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateDownloading by remember { mutableStateOf(false) }
+    var updateProgress by remember { mutableStateOf(0f) }
+    var updateAvailable by remember { mutableStateOf<RemoteAppVersion?>(null) }
+    var pendingApk by remember { mutableStateOf<File?>(null) }
+    var showInstallPermission by remember { mutableStateOf(false) }
+    var showPendingInstall by remember { mutableStateOf(false) }
+
+    fun checkForUpdate() {
+        if (updateChecking || updateDownloading) return
+        scope.launch {
+            updateChecking = true
+            updateAvailable = null
+            try {
+                when (val result = updateRepo.checkForUpdate()) {
+                    is UpdateCheckResult.UpToDate ->
+                        snackbar.showSnackbar("已是最新 · ${result.localName}")
+                    is UpdateCheckResult.Available -> {
+                        updateAvailable = result.remote
+                    }
+                    is UpdateCheckResult.Failed ->
+                        snackbar.showSnackbar(result.message)
+                }
+            } finally {
+                updateChecking = false
+            }
+        }
+    }
+
+    fun downloadAndInstall(remote: RemoteAppVersion) {
+        scope.launch {
+            updateDownloading = true
+            updateProgress = 0f
+            try {
+                updateRepo.downloadApk(remote) { updateProgress = it }
+                    .onSuccess { file ->
+                        pendingApk = file
+                        updateAvailable = null
+                        if (!updateRepo.canInstallPackages()) {
+                            showInstallPermission = true
+                        } else {
+                            updateRepo.installApk(file)
+                                .onSuccess { snackbar.showSnackbar("请按系统提示安装") }
+                                .onFailure { e ->
+                                    if (e.message == "NEED_INSTALL_PERMISSION") {
+                                        showInstallPermission = true
+                                    } else {
+                                        snackbar.showSnackbar(e.message ?: "无法安装")
+                                    }
+                                }
+                        }
+                    }
+                    .onFailure { snackbar.showSnackbar(it.message ?: "下载失败") }
+            } finally {
+                updateDownloading = false
+            }
+        }
+    }
+
+    fun installPendingApk() {
+        val file = pendingApk ?: return
+        if (!updateRepo.canInstallPackages()) {
+            showInstallPermission = true
+            return
+        }
+        updateRepo.installApk(file)
+            .onSuccess {
+                scope.launch { snackbar.showSnackbar("请按系统提示安装") }
+            }
+            .onFailure { e ->
+                scope.launch {
+                    if (e.message == "NEED_INSTALL_PERMISSION") showInstallPermission = true
+                    else snackbar.showSnackbar(e.message ?: "无法安装")
+                }
+            }
+    }
 
     var filterSeason by remember { mutableStateOf("") }
     var filterType by remember { mutableStateOf("") }
@@ -296,7 +378,9 @@ fun MainScreen(
                             selectedIds = emptySet()
                         },
                         onDiscarded = onDiscarded,
-                        exportEnabled = !busy
+                        onCheckUpdate = { checkForUpdate() },
+                        exportEnabled = !busy,
+                        updateBusy = updateChecking || updateDownloading
                     )
                 }
             }
@@ -405,6 +489,54 @@ fun MainScreen(
             text = "文件已保存至：\n${result.path}\n\n大小：约 $sizeKb KB\n\n格式：ZIP（推荐，导入更快）",
             confirmText = "知道了",
             onConfirm = { exportSuccess = null }
+        )
+    }
+
+    updateAvailable?.let { remote ->
+        val notes = remote.notes.ifBlank { "无更新说明" }
+        AppAlertDialog(
+            onDismissRequest = { if (!updateDownloading) updateAvailable = null },
+            title = "发现新版本 ${remote.versionName}",
+            text = "当前：${updateRepo.localVersionName()} (${updateRepo.localVersionCode()})\n" +
+                "最新：${remote.versionName} (${remote.versionCode})\n\n$notes" +
+                if (updateDownloading) "\n\n下载中 ${(updateProgress * 100).toInt()}%" else "",
+            confirmText = if (updateDownloading) "下载中…" else "下载并安装",
+            onConfirm = {
+                if (!updateDownloading) downloadAndInstall(remote)
+            },
+            dismissText = "稍后"
+        )
+    }
+
+    if (showInstallPermission) {
+        AppAlertDialog(
+            onDismissRequest = {
+                showInstallPermission = false
+                if (pendingApk != null) showPendingInstall = true
+            },
+            title = "需要安装权限",
+            text = "请允许本应用安装未知来源应用，返回后点「安装」。",
+            confirmText = "去设置",
+            onConfirm = {
+                showInstallPermission = false
+                context.startActivity(updateRepo.intentOpenUnknownAppSettings())
+                if (pendingApk != null) showPendingInstall = true
+            },
+            dismissText = "取消"
+        )
+    }
+
+    if (showPendingInstall && pendingApk != null) {
+        AppAlertDialog(
+            onDismissRequest = { showPendingInstall = false },
+            title = "安装更新",
+            text = "安装包已下载，是否现在安装？",
+            confirmText = "安装",
+            onConfirm = {
+                showPendingInstall = false
+                installPendingApk()
+            },
+            dismissText = "取消"
         )
     }
 
@@ -583,7 +715,9 @@ private fun IoBar(
     onImport: () -> Unit,
     onBatch: () -> Unit,
     onDiscarded: () -> Unit,
-    exportEnabled: Boolean
+    onCheckUpdate: () -> Unit,
+    exportEnabled: Boolean,
+    updateBusy: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -604,6 +738,12 @@ private fun IoBar(
         IoLink(if (batchMode) "取消" else "批量", onClick = onBatch)
         IoDivider()
         IoLink("已扔掉", color = WardrobeConstants.DiscardBrown, onClick = onDiscarded)
+        IoDivider()
+        IoLink(
+            if (updateBusy) "更新中" else "更新",
+            enabled = !updateBusy,
+            onClick = onCheckUpdate
+        )
         Text(
             "共 $count 件",
             fontSize = 11.sp,

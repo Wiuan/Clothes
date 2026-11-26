@@ -170,10 +170,14 @@ fun buildColorRecommendations(
         b.createdAt.compareTo(a.createdAt)
     }
     val companions = allClothes.filter { c ->
-        c.id != cloth.id && c.status != "discarded" && c.season == cloth.season &&
+        c.id != cloth.id && c.status != "discarded" &&
+            WardrobeConstants.seasonsCompatible(cloth.season, c.season) &&
             colorsOverlap(clothColorsForRecommend(c), companionPalette)
     }.sortedWith { a, b ->
-        // 按搭配色顺序分组，便于点击搭配色后横向定位
+        // 同季优先于邻季，再按搭配色分组
+        val sa = WardrobeConstants.seasonMatchRank(cloth.season, a.season)
+        val sb = WardrobeConstants.seasonMatchRank(cloth.season, b.season)
+        if (sa != sb) return@sortedWith sa.compareTo(sb)
         val ra = companionPaletteRank(a, displayPalette)
         val rb = companionPaletteRank(b, displayPalette)
         if (ra != rb) return@sortedWith ra.compareTo(rb)

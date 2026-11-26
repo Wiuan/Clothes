@@ -54,10 +54,19 @@ fun filterClothes(
     season: String,
     type: String,
     color: String,
-    currentTemp: String = ""
+    currentTemp: String = "",
+    /** 今日穿着等：冬/春秋筛选时带上邻季，方便叠穿选衣 */
+    includeAdjacentSeasons: Boolean = false
 ): List<ClothEntity> = list.filter { item ->
     if (item.status == "discarded") return@filter false
-    if (season.isNotEmpty() && item.season != season) return@filter false
+    if (season.isNotEmpty()) {
+        val ok = if (includeAdjacentSeasons) {
+            WardrobeConstants.seasonsCompatible(season, item.season)
+        } else {
+            item.season == season
+        }
+        if (!ok) return@filter false
+    }
     if (type.isNotEmpty() && item.type != type) return@filter false
     if (!itemMatchesColor(item, color)) return@filter false
     val temp = currentTemp.trim().toIntOrNull()

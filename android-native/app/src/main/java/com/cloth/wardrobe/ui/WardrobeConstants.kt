@@ -22,6 +22,30 @@ object WardrobeConstants {
     const val ALL = "全部"
 
     val SEASONS = listOf("夏", "春秋", "冬")
+
+    /**
+     * 叠穿邻季：仅 冬↔春秋（夏天不扩）。
+     * 例：选「冬」时可见春秋内搭；选「春秋」时可见冬外套。
+     */
+    fun adjacentSeasonSet(season: String): Set<String> = when (season) {
+        "冬" -> setOf("冬", "春秋")
+        "春秋" -> setOf("春秋", "冬")
+        "夏" -> setOf("夏")
+        else -> if (season.isBlank()) emptySet() else setOf(season)
+    }
+
+    fun seasonsCompatible(a: String, b: String): Boolean {
+        if (a.isBlank() || b.isBlank()) return a == b
+        if (a == b) return true
+        return b in adjacentSeasonSet(a)
+    }
+
+    /** 同季优先于邻季（用于排序） */
+    fun seasonMatchRank(preferred: String, candidate: String): Int = when {
+        candidate == preferred -> 0
+        seasonsCompatible(preferred, candidate) -> 1
+        else -> 2
+    }
     val TYPES = listOf("上衣", "下装", "长款", "运动")
     val PRESET_COLORS = listOf("红", "黄", "蓝", "黑", "白", "绿", "紫", "棕", "灰", "其他")
 

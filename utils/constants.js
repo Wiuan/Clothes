@@ -18,6 +18,32 @@ export const COLORS = PRESET_COLORS
 
 export const SEASONS = ['夏', '春秋', '冬']
 
+/**
+ * 叠穿邻季：仅 冬↔春秋（夏天不扩）
+ * @param {string} season
+ * @returns {Set<string>}
+ */
+export function adjacentSeasonSet(season) {
+  if (season === '冬') return new Set(['冬', '春秋'])
+  if (season === '春秋') return new Set(['春秋', '冬'])
+  if (season === '夏') return new Set(['夏'])
+  return season ? new Set([season]) : new Set()
+}
+
+/** @param {string} a @param {string} b */
+export function seasonsCompatible(a, b) {
+  if (!a || !b) return a === b
+  if (a === b) return true
+  return adjacentSeasonSet(a).has(b)
+}
+
+/** 同季优先于邻季（排序用，越小越靠前） */
+export function seasonMatchRank(preferred, candidate) {
+  if (candidate === preferred) return 0
+  if (seasonsCompatible(preferred, candidate)) return 1
+  return 2
+}
+
 export const TYPE_TOP = '上衣'
 export const TYPE_BOTTOM = '下装'
 export const TYPE_LONG = '长款'

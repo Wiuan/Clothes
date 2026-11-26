@@ -522,9 +522,9 @@ private fun ClothDetailPageContent(
                             if (rec.companions.isEmpty()) {
                                 Text(
                                     if (rec.matchedInspirations.isNotEmpty()) {
-                                        "相关灵感暂无辅色/点缀，或衣柜里还没有同搭配色的${item.season}单品"
+                                        "相关灵感暂无辅色/点缀，或衣柜里还没有同搭配色的可叠穿单品"
                                     } else if (rec.palette.isNotEmpty()) {
-                                        "衣柜里暂无其他${item.season}同色系单品可搭配"
+                                        "衣柜里暂无其他同色系可叠穿单品（冬↔春秋）"
                                     } else {
                                         "暂无同色系单品"
                                     },
