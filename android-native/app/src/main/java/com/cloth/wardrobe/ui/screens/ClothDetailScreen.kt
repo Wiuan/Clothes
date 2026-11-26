@@ -383,7 +383,7 @@ private fun ClothDetailPageContent(
                         }
                         else -> {
                             Text(
-                                "点搭配色：灵感按该色筛选（再点取消）；单品滚到对应颜色",
+                                "点搭配色：灵感与单品均按该色筛选（再点取消）；冬↔春秋可叠穿",
                                 fontSize = 11.sp,
                                 color = WardrobeConstants.TextMuted,
                                 lineHeight = 15.sp,
@@ -395,6 +395,11 @@ private fun ClothDetailPageContent(
                                 else rec.matchedInspirations.filter {
                                     inspirationMatchesColorName(it, color)
                                 }
+                            }
+                            val filteredCompanions = remember(rec.companions, selectedPaletteColor) {
+                                val color = selectedPaletteColor
+                                if (color.isNullOrBlank()) rec.companions
+                                else rec.companions.filter { clothMatchesColorName(it, color) }
                             }
                             if (rec.palette.isNotEmpty()) {
                                 Row(
@@ -435,19 +440,8 @@ private fun ClothDetailPageContent(
                                                     val clearing = selectedPaletteColor == colorName
                                                     selectedPaletteColor = if (clearing) null else colorName
                                                     scope.launch {
-                                                        if (!clearing) {
-                                                            inspirationListState.scrollToItem(0)
-                                                            val clothIdx = rec.companions.indexOfFirst {
-                                                                clothMatchesColorName(it, colorName)
-                                                            }
-                                                            if (clothIdx >= 0) {
-                                                                companionListState.animateScrollToItem(clothIdx)
-                                                            }
-                                                        } else if (
-                                                            inspirationListState.layoutInfo.totalItemsCount > 0
-                                                        ) {
-                                                            inspirationListState.animateScrollToItem(0)
-                                                        }
+                                                        inspirationListState.scrollToItem(0)
+                                                        companionListState.scrollToItem(0)
                                                     }
                                                 }
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
@@ -532,9 +526,19 @@ private fun ClothDetailPageContent(
                                     color = WardrobeConstants.TextHint,
                                     lineHeight = 18.sp
                                 )
+                            } else if (filteredCompanions.isEmpty()) {
+                                Text(
+                                    "当前搭配色下暂无单品，再点该色可取消筛选",
+                                    fontSize = 12.sp,
+                                    color = WardrobeConstants.TextHint
+                                )
                             } else {
                                 Text(
-                                    "共 ${rec.companions.size} 件，按颜色排列，点搭配色可定位",
+                                    if (selectedPaletteColor != null) {
+                                        "显示含「${selectedPaletteColor}」 ${filteredCompanions.size}/${rec.companions.size} 件（含邻季），再点取消"
+                                    } else {
+                                        "共 ${rec.companions.size} 件，按颜色排；点搭配色可筛选（冬↔春秋）"
+                                    },
                                     fontSize = 11.sp,
                                     color = WardrobeConstants.TextMuted,
                                     modifier = Modifier.padding(bottom = 4.dp)
@@ -544,12 +548,17 @@ private fun ClothDetailPageContent(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     items(
-                                        items = rec.companions,
+                                        items = filteredCompanions,
                                         key = { it.id }
                                     ) { c ->
-                                        CompanionRecCard(c, context) {
-                                            if (c.id != clothId) onClothClick(c.id)
-                                        }
+                                        CompanionRecCard(
+                                            cloth = c,
+                                            context = context,
+                                            highlightSeason = c.season != item.season,
+                                            onClick = {
+                                                if (c.id != clothId) onClothClick(c.id)
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -812,6 +821,7 @@ private fun InspirationRecCard(
 private fun CompanionRecCard(
     cloth: ClothEntity,
     context: android.content.Context,
+    highlightSeason: Boolean = false,
     onClick: () -> Unit
 ) {
     Box(
@@ -839,6 +849,12 @@ private fun CompanionRecCard(
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
+                    )
+                }
+                if (highlightSeason && cloth.season.isNotBlank()) {
+                    RecBadge(
+                        cloth.season,
+                        Modifier.align(Alignment.TopEnd).padding(4.dp)
                     )
                 }
             }

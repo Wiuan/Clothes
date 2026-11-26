@@ -114,6 +114,11 @@ export function companionTypeRank(currentType, candidateType) {
 
 export function sortCompanionClothes(cloth, companions) {
   return [...(companions || [])].sort((a, b) => {
+    // 颜色优先（与 Android 一致）；同色内同季优先于邻季
+    const ca = (getItemColors(a)[0] || '')
+    const cb = (getItemColors(b)[0] || '')
+    const dColor = String(ca).localeCompare(String(cb), 'zh')
+    if (dColor !== 0) return dColor
     const sa = seasonMatchRank(cloth?.season, a.season)
     const sb = seasonMatchRank(cloth?.season, b.season)
     if (sa !== sb) return sa - sb
