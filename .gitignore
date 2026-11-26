@@ -10,3 +10,6 @@ android-native/.gradle/
 android-native/.idea/
 android-native/**/build/
 android-native/local.properties
+
+# 安装包只走 GitHub Releases，不进仓库
+update/*.apk
